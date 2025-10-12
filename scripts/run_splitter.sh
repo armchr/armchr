@@ -61,6 +61,7 @@ MCP_CONFIG=""
 VERBOSE=""
 COMMIT=""
 INTERACTIVE=""
+PATCH=""
 ADDITIONAL_ARGS=""
 
 while [[ $# -gt 0 ]]; do
@@ -85,6 +86,10 @@ while [[ $# -gt 0 ]]; do
             COMMIT="$2"
             shift 2
             ;;
+        --patch)
+            PATCH="$2"
+            shift 2
+            ;;
         --interactive|-it)
             INTERACTIVE="-it"
             shift
@@ -97,6 +102,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --api-key API_KEY      OpenAI API key (or set OPENAI_API_KEY env var)"
             echo "  --mcp-config FILE      MCP configuration file path"
             echo "  --commit COMMIT_HASH   Specific commit to analyze"
+            echo "  --patch PATCH_FILE     Patch file to analyze"
             echo "  --verbose              Enable verbose output"
             echo "  --interactive, -it     Run in interactive mode"
             echo "  --help, -h             Show this help message"
@@ -196,6 +202,10 @@ fi
 
 if [ ! -z "$COMMIT" ]; then
     DOCKER_CMD="$DOCKER_CMD --commit $COMMIT"
+fi
+
+if [ ! -z "$PATCH" ]; then
+    DOCKER_CMD="$DOCKER_CMD --patch $PATCH"
 fi
 
 if [ ! -z "$MCP_CONFIG" ]; then
