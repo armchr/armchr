@@ -498,20 +498,13 @@ echo "🐳 Pulling required Docker images..."
 # Check if Docker is running
 if ! docker info > /dev/null 2>&1; then
     echo "⚠️  Warning: Docker is not running. Skipping Docker image pulls."
-    echo "   Please start Docker and run 'docker pull armchr/splitter' and 'docker pull armchr/explainer_ui' manually."
+    echo "   Please start Docker and run 'docker pull armchr/explainer' manually."
 else
-    echo "📥 Pulling armchr/splitter..."
-    if docker pull armchr/splitter; then
-        echo "✅ Successfully pulled armchr/splitter"
+    echo "📥 Pulling armchr/explainer..."
+    if docker pull armchr/explainer; then
+        echo "✅ Successfully pulled armchr/explainer"
     else
-        echo "❌ Failed to pull armchr/splitter"
-    fi
-    
-    echo "📥 Pulling armchr/explainer_ui..."
-    if docker pull armchr/explainer_ui; then
-        echo "✅ Successfully pulled armchr/explainer_ui"
-    else
-        echo "❌ Failed to pull armchr/explainer_ui"
+        echo "❌ Failed to pull armchr/explainer"
     fi
 fi
 

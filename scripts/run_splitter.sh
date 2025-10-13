@@ -190,7 +190,7 @@ if [ ! -z "$MCP_CONFIG" ]; then
     echo "🔧 MCP config: $MCP_CONFIG"
 fi
 
-DOCKER_CMD="$DOCKER_CMD splitter:latest"
+DOCKER_CMD="$DOCKER_CMD armchr/explainer:latest"
 DOCKER_CMD="$DOCKER_CMD --repo $REPO_NAME"
 DOCKER_CMD="$DOCKER_CMD --source-config /config/source.yaml"
 DOCKER_CMD="$DOCKER_CMD --output-dir /output"
