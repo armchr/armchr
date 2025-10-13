@@ -60,6 +60,10 @@ PORT_BACKEND="8787"
 DETACHED="-d"
 DOCKER_IMAGE="armchr/explainer:latest"
 CONTAINER_NAME="armchair-explainer"
+NO_LLM=""
+CLI_API_KEY=""
+CLI_API_BASE_URL=""
+CLI_MODEL_NAME=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -79,6 +83,22 @@ while [[ $# -gt 0 ]]; do
             CONTAINER_NAME="$2"
             shift 2
             ;;
+        --no-llm)
+            NO_LLM="true"
+            shift
+            ;;
+        --api-key)
+            CLI_API_KEY="$2"
+            shift 2
+            ;;
+        --api-base-url)
+            CLI_API_BASE_URL="$2"
+            shift 2
+            ;;
+        --model-name)
+            CLI_MODEL_NAME="$2"
+            shift 2
+            ;;
         --local)
             DOCKER_IMAGE="explainer:latest"
             shift
@@ -91,26 +111,48 @@ while [[ $# -gt 0 ]]; do
             echo "Usage: $0 [OPTIONS]"
             echo ""
             echo "Options:"
-            echo "  --port-frontend PORT   Frontend UI port (default: 8686)"
-            echo "  --port-backend PORT    Backend API port (default: 8787)"
-            echo "  --foreground, -f       Run in foreground mode (default: detached)"
-            echo "  --name NAME            Container name (default: armchair-explainer)"
-            echo "  --local                Use local image 'explainer:latest' instead of 'armchr/explainer:latest'"
-            echo "  --image IMAGE          Use custom Docker image"
-            echo "  --help, -h             Show this help message"
+            echo "  --port-frontend PORT    Frontend UI port (default: 8686)"
+            echo "  --port-backend PORT     Backend API port (default: 8787)"
+            echo "  --foreground, -f        Run in foreground mode (default: detached)"
+            echo "  --name NAME             Container name (default: armchair-explainer)"
+            echo "  --local                 Use local image 'explainer:latest' instead of 'armchr/explainer:latest'"
+            echo "  --image IMAGE           Use custom Docker image"
+            echo "  --help, -h              Show this help message"
             echo ""
-            echo "Example:"
-            echo "  $0                      # Run in detached mode (default)"
+            echo "LLM Configuration (required unless --no-llm is specified):"
+            echo "  --no-llm                Run without LLM support"
+            echo "  --api-key KEY           API key for LLM service"
+            echo "  --api-base-url URL      API base URL (e.g., https://api.openai.com/v1)"
+            echo "  --model-name MODEL      Model name (e.g., gpt-4, claude-3-5-sonnet-20241022)"
+            echo ""
+            echo "Examples:"
+            echo "  # Run without LLM"
+            echo "  $0 --local --no-llm"
+            echo ""
+            echo "  # Run with OpenAI using command line options"
+            echo "  $0 --local --api-key sk-... --api-base-url https://api.openai.com/v1 --model-name gpt-4"
+            echo ""
+            echo "  # Run with environment variables"
+            echo "  export OPENAI_API_KEY=sk-..."
+            echo "  export ARMCHAIR_MODEL_API_BASE_URL=https://api.openai.com/v1"
+            echo "  export ARMCHAIR_MODEL_NAME=gpt-4"
+            echo "  $0 --local"
+            echo ""
+            echo "  # Other options"
             echo "  $0 --foreground         # Run in foreground mode"
             echo "  $0 --port-frontend 3000 --port-backend 3001"
-            echo "  $0 --local              # Use locally built image"
             echo "  $0 --name my-explainer  # Use custom container name"
             echo ""
-            echo "Environment variables:"
-            echo "  ARMCHAIR_HOME          - Armchair workspace directory"
-            echo "  ARMCHAIR_OUTPUT        - Output directory for results"
-            echo "  ARMCHAIR_FS_MAP        - File system mappings for docker volumes"
-            echo "  ARMCHAIR_SOURCE_YAML   - Source configuration file"
+            echo "Environment variables (alternative to command line options):"
+            echo "  ARMCHAIR_HOME                - Armchair workspace directory"
+            echo "  ARMCHAIR_OUTPUT              - Output directory for results"
+            echo "  ARMCHAIR_FS_MAP              - File system mappings for docker volumes"
+            echo "  ARMCHAIR_SOURCE_YAML         - Source configuration file"
+            echo "  OPENAI_API_KEY               - OpenAI API key"
+            echo "  ANTHROPIC_API_KEY            - Anthropic API key"
+            echo "  API_KEY                      - Generic API key fallback"
+            echo "  ARMCHAIR_MODEL_API_BASE_URL  - API base URL"
+            echo "  ARMCHAIR_MODEL_NAME          - Model name"
             exit 0
             ;;
         *)
@@ -120,6 +162,48 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Merge CLI options with environment variables (CLI takes precedence)
+FINAL_API_KEY="${CLI_API_KEY:-${OPENAI_API_KEY:-${ANTHROPIC_API_KEY:-${API_KEY}}}}"
+FINAL_API_BASE_URL="${CLI_API_BASE_URL:-${ARMCHAIR_MODEL_API_BASE_URL}}"
+FINAL_MODEL_NAME="${CLI_MODEL_NAME:-${ARMCHAIR_MODEL_NAME}}"
+
+# Validate LLM configuration
+if [ -z "$NO_LLM" ]; then
+    echo "🤖 LLM mode enabled - validating configuration..."
+
+    missing_params=()
+
+    if [ -z "$FINAL_API_KEY" ]; then
+        missing_params+=("API key (--api-key or OPENAI_API_KEY/ANTHROPIC_API_KEY/API_KEY)")
+    fi
+
+    if [ -z "$FINAL_API_BASE_URL" ]; then
+        missing_params+=("API base URL (--api-base-url or ARMCHAIR_MODEL_API_BASE_URL)")
+    fi
+
+    if [ -z "$FINAL_MODEL_NAME" ]; then
+        missing_params+=("Model name (--model-name or ARMCHAIR_MODEL_NAME)")
+    fi
+
+    if [ ${#missing_params[@]} -gt 0 ]; then
+        echo "❌ Error: LLM mode requires the following parameters:"
+        for param in "${missing_params[@]}"; do
+            echo "   - $param"
+        done
+        echo ""
+        echo "Either provide these parameters or use --no-llm to run without LLM support."
+        echo "Run $0 --help for more information."
+        exit 1
+    fi
+
+    echo "✅ LLM configuration validated"
+    echo "   API Base URL: $FINAL_API_BASE_URL"
+    echo "   Model: $FINAL_MODEL_NAME"
+    echo "   API Key: ${FINAL_API_KEY:0:10}..."
+else
+    echo "🚫 LLM mode disabled - running with --no-llm"
+fi
 
 echo "🌐 Frontend UI port: $PORT_FRONTEND"
 echo "🔌 Backend API port: $PORT_BACKEND"
@@ -160,13 +244,13 @@ DOCKER_CMD="$DOCKER_CMD $VOLUME_ARGS"
 DOCKER_CMD="$DOCKER_CMD -e CONFIG_PATH=/app/config/source.yaml"
 DOCKER_CMD="$DOCKER_CMD -e OUTPUT_PATH=/app/output"
 
-# Add model configuration environment variables if they exist
-if [ ! -z "$ARMCHAIR_MODEL_API_BASE_URL" ]; then
-    DOCKER_CMD="$DOCKER_CMD -e API_BASE_URL=\"$ARMCHAIR_MODEL_API_BASE_URL\""
-fi
-
-if [ ! -z "$ARMCHAIR_MODEL_NAME" ]; then
-    DOCKER_CMD="$DOCKER_CMD -e MODEL_NAME=\"$ARMCHAIR_MODEL_NAME\""
+# Add LLM configuration if not in --no-llm mode
+if [ -z "$NO_LLM" ]; then
+    # Pass the final merged values to the container
+    DOCKER_CMD="$DOCKER_CMD -e OPENAI_API_KEY=\"$FINAL_API_KEY\""
+    DOCKER_CMD="$DOCKER_CMD -e API_KEY=\"$FINAL_API_KEY\""
+    DOCKER_CMD="$DOCKER_CMD -e API_BASE_URL=\"$FINAL_API_BASE_URL\""
+    DOCKER_CMD="$DOCKER_CMD -e MODEL_NAME=\"$FINAL_MODEL_NAME\""
 fi
 
 DOCKER_CMD="$DOCKER_CMD $DOCKER_IMAGE"
