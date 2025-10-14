@@ -24,7 +24,7 @@ The **Explainer UI** provides a web-based interface for exploring and understand
 ### Prerequisites
 
 - Docker installed and running
-- API key for Claude (Anthropic) or OpenAI
+- API key for Claude (Anthropic) or OpenAI or your local LLM. Expects OpenAI compatible API (Ollama etc.)
 - Git repositories you want to analyze
 
 ### 1. Setup Environment
@@ -51,7 +51,7 @@ This script will:
 Follow the prompts to:
 - Verify your `ARMCHAIR_HOME` directory
 - Add repositories you want to analyze
-- Configure your Claude or OpenAI API key (Splitter agent supports any OpenAI-compatible API)
+- Configure your API key (supports any OpenAI-compatible API)
 
 ### 2. Load Environment
 
@@ -62,41 +62,12 @@ Source the generated environment file:
 source $ARMCHAIR_HOME/armchair_env.sh
 ```
 
-### 3. Run Analysis
+### 3. Start Explainer
 
-Run the Splitter Agent to analyze your code:
-
-```bash
-# Run the splitter for a specific repository
-./scripts/run_splitter.sh --repo REPO_NAME --api-key YOUR_API_KEY
-
-# Example with verbose output
-./scripts/run_splitter.sh --repo my-repo --api-key sk-... --verbose
-
-# Run for a specific commit
-./scripts/run_splitter.sh --repo my-repo --api-key sk-... --commit abc123
-
-# Run in interactive mode
-./scripts/run_splitter.sh --repo my-repo --api-key sk-... --interactive
-```
-
-**Available Options:**
-- `--repo REPO_NAME` - Repository name from source config (required)
-- `--api-key API_KEY` - API key (or set OPENAI_API_KEY env var)
-- `--mcp-config FILE` - MCP configuration file path
-- `--commit COMMIT_HASH` - Specific commit to analyze
-- `--verbose` - Enable verbose output
-- `--interactive, -it` - Run in interactive mode
-- `--help, -h` - Show help message
-
-**Note:** You can set `OPENAI_API_KEY` as an environment variable instead of using `--api-key`.
-
-### 4. Start Explainer UI
-
-Launch the web interface to explore your code analysis. This is a one-time step - you can run analysis multiple times without restarting the UI.
+Run the explainer script, which launches a Docker container with both the Splitter Agent and Explainer UI:
 
 ```bash
-# Start the Explainer UI without LLM support
+# Start without LLM support (view-only mode)
 ./scripts/run_explainer.sh --no-llm
 
 # OR start with LLM support for interactive chat
@@ -106,6 +77,15 @@ Launch the web interface to explore your code analysis. This is a one-time step 
   --model-name claude-3-5-sonnet-20241022
 ```
 
+The explainer will be available at:
+- **Frontend UI:** http://localhost:8686
+- **Backend API:** http://localhost:8787
+
+Use the web interface to:
+- Browse and analyze your code repositories
+- Run the splitter agent on commits or uncommitted changes
+- Explore code explanations with LLM-powered chat (if enabled)
+
 **Common Options:**
 - `--no-llm` - Run without LLM support (view-only mode)
 - `--api-key KEY` - API key for LLM service
@@ -114,12 +94,7 @@ Launch the web interface to explore your code analysis. This is a one-time step 
 - `--port-frontend PORT` - Frontend UI port (default: 8686)
 - `--port-backend PORT` - Backend API port (default: 8787)
 - `--foreground, -f` - Run in foreground mode
-- `--local` - Use local Docker image instead of `armchr/explainer:latest`
-- `--help, -h` - Show help message
-
-The UI will be available at:
-- Frontend: http://localhost:8686
-- Backend API: http://localhost:8787
+- `--help, -h` - Show full help message
 
 **Note:** LLM configuration can also be set via environment variables:
 - `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` or `API_KEY`
@@ -146,6 +121,53 @@ The system uses the following volume mapping strategy:
 - **File System Map**: `git_root_path:/workspace1` (maps entire git repositories)
 - **Source Config**: Uses workspace-relative paths like `/workspace1/subfolder`
 
+## Running Splitter Agent as Command-Line Tool
+
+If you prefer to run the Splitter Agent as a standalone command-line tool (without the UI), you can use the `run_splitter.sh` script. This is useful for:
+- CI/CD pipelines
+- Batch processing multiple repositories
+- Automated analysis workflows
+- Integration with other tools
+
+### Usage
+
+```bash
+# Run the splitter for a specific repository
+./scripts/run_splitter.sh --repo REPO_NAME --api-key YOUR_API_KEY
+
+# Example with verbose output
+./scripts/run_splitter.sh --repo my-repo --api-key sk-... --verbose
+
+# Run for a specific commit
+./scripts/run_splitter.sh --repo my-repo --api-key sk-... --commit abc123
+
+# Run in interactive mode
+./scripts/run_splitter.sh --repo my-repo --api-key sk-... --interactive
+
+# Use MCP configuration
+./scripts/run_splitter.sh --repo my-repo --api-key sk-... --mcp-config /path/to/mcp.json
+```
+
+### Available Options
+
+- `--repo REPO_NAME` - Repository name from source config (required)
+- `--api-key API_KEY` - API key (or set OPENAI_API_KEY env var)
+- `--mcp-config FILE` - MCP configuration file path
+- `--commit COMMIT_HASH` - Specific commit to analyze
+- `--patch` - Analyze uncommitted changes
+- `--verbose` - Enable verbose output
+- `--interactive, -it` - Run in interactive mode
+- `--help, -h` - Show help message
+
+**Note:** You can set `OPENAI_API_KEY` as an environment variable instead of using `--api-key`.
+
+### Output
+
+The splitter generates structured analysis output in `$ARMCHAIR_OUTPUT`, which can be:
+- Viewed using the Explainer UI
+- Processed by other tools
+- Committed to version control for historical tracking
+
 ## Scripts
 
 ### `scripts/setup_armchair.sh`
@@ -170,11 +192,14 @@ Starts the Explainer UI with proper Docker configuration:
 - Configurable ports and Docker images
 - Provides helpful status messages
 
-## Manual Docker Commands
+## Advanced: Manual Docker Commands
 
-If you prefer to run Docker commands manually:
+If you prefer to run Docker commands manually instead of using the provided scripts:
 
-### Splitter Agent
+### Standalone Splitter Agent
+
+For running the splitter agent without the UI:
+
 ```bash
 docker run --rm \
   -v "your_git_root:/workspace1:ro" \
@@ -187,7 +212,9 @@ docker run --rm \
   --source-config /config/source.yaml
 ```
 
-### Explainer UI (without LLM)
+### Explainer (Splitter + UI combined)
+
+**Without LLM support (view-only mode):**
 ```bash
 docker run -d \
   --name armchair-explainer \
@@ -200,7 +227,7 @@ docker run -d \
   armchr/explainer:latest
 ```
 
-### Explainer UI (with LLM)
+**With LLM support (interactive chat enabled):**
 ```bash
 docker run -d \
   --name armchair-explainer \
