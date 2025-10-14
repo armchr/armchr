@@ -67,10 +67,7 @@ source $ARMCHAIR_HOME/armchair_env.sh
 Run the explainer script, which launches a Docker container with both the Splitter Agent and Explainer UI:
 
 ```bash
-# Start without LLM support (view-only mode)
-./scripts/run_explainer.sh --no-llm
-
-# OR start with LLM support for interactive chat
+# Start with LLM support for semantic analysis and grouping + annotating changes
 ./scripts/run_explainer.sh \
   --api-key YOUR_API_KEY \
   --api-base-url https://api.anthropic.com/v1 \
@@ -84,22 +81,66 @@ The explainer will be available at:
 Use the web interface to:
 - Browse and analyze your code repositories
 - Run the splitter agent on commits or uncommitted changes
-- Explore code explanations with LLM-powered chat (if enabled)
+- Explore code the separate patches and annotated changes in each.
 
 **Common Options:**
-- `--no-llm` - Run without LLM support (view-only mode)
 - `--api-key KEY` - API key for LLM service
 - `--api-base-url URL` - API base URL (e.g., `https://api.openai.com/v1` or `https://api.anthropic.com/v1`)
 - `--model-name MODEL` - Model name (e.g., `gpt-4`, `claude-3-5-sonnet-20241022`)
 - `--port-frontend PORT` - Frontend UI port (default: 8686)
 - `--port-backend PORT` - Backend API port (default: 8787)
-- `--foreground, -f` - Run in foreground mode
+- `--no-llm` - Will run splitter without LLM support (no semantic analysis, annotation). Not recommended
 - `--help, -h` - Show full help message
 
 **Note:** LLM configuration can also be set via environment variables:
 - `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` or `API_KEY`
 - `ARMCHAIR_MODEL_API_BASE_URL`
 - `ARMCHAIR_MODEL_NAME`
+
+### 4. Trigger Analysis via API
+
+Once the explainer docker is running, you can trigger the splitter agent via the backend API using curl:
+
+```bash
+# Split a specific commit
+curl -X POST http://localhost:8787/api/split \
+  -H "Content-Type: application/json" \
+  -d '{
+    "repoName": "my-repo",
+    "branch": "main",
+    "commitId": "abc1234"
+  }'
+
+# Split uncommitted changes (working directory)
+curl -X POST http://localhost:8787/api/split \
+  -H "Content-Type: application/json" \
+  -d '{
+    "repoName": "my-repo",
+    "branch": "main"
+  }'
+
+```
+
+**Parameters:**
+- `repoName` (required) - Repository name from your source config
+- `branch` (required) - Target branch to analyze
+- `commitId` (optional) - Specific commit hash to analyze. If omitted, analyzes uncommitted changes
+
+**Other useful API endpoints:**
+
+```bash
+# List all repositories and their branches
+curl http://localhost:8787/api/repositories
+
+# List all analyzed commits
+curl http://localhost:8787/api/commits
+
+# Get diff for a specific commit
+curl http://localhost:8787/api/repositories/my-repo/commits/abc1234/diff
+
+# Get uncommitted changes diff
+curl http://localhost:8787/api/repositories/my-repo/branches/main/working-directory/diff
+```
 
 ## Configuration
 
