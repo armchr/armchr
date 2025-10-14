@@ -99,7 +99,8 @@ Use the web interface to:
 
 ### 4. Trigger Analysis via API
 
-Once the explainer docker is running, you can trigger the splitter agent via the backend API using curl:
+Once the explainer docker is running, you can trigger splitter from the UI for a commit or uncommitted changes.
+If you need direct access to the splitter agent, trigger the agent via the backend API:
 
 ```bash
 # Split a specific commit
