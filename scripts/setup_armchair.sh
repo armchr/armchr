@@ -355,18 +355,15 @@ EOF
             workspace_repo_path="/$workspace"
         fi
         
-        read -p "Enter programming language (e.g., python, javascript, go, java): " repo_language
-        if [ -z "$repo_language" ]; then
-            echo "❌ Programming language cannot be empty"
-            continue
-        fi
-        
+        # Use default language (not critical for splitter functionality)
+        repo_language="multi"
+
         # Store repo info
         repo_names+=("$repo_name")
         repo_paths+=("$workspace_repo_path")
         repo_languages+=("$repo_language")
-        
-        echo "✅ Added repository: $repo_name ($repo_language) at $repo_path"
+
+        echo "✅ Added repository: $repo_name at $repo_path"
     done
     
     if [ ${#repo_names[@]} -eq 0 ]; then

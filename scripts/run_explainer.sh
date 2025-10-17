@@ -220,8 +220,8 @@ for mapping in "${MAPPINGS[@]}"; do
     container_path="${PARTS[1]}"
 
     if [ -d "$local_path" ]; then
-        VOLUME_ARGS="$VOLUME_ARGS -v \"$local_path:$container_path:ro\""
-        echo "📁 Mapping: $local_path -> $container_path"
+        VOLUME_ARGS="$VOLUME_ARGS -v \"$local_path:$container_path\""
+        echo "📁 Mapping: $local_path -> $container_path (read-write)"
     else
         echo "⚠️  Warning: Local path does not exist: $local_path"
     fi
