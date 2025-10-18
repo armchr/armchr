@@ -164,7 +164,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Merge CLI options with environment variables (CLI takes precedence)
-FINAL_API_KEY="${CLI_API_KEY:-${OPENAI_API_KEY:-${ANTHROPIC_API_KEY:-${API_KEY}}}}"
+# Support legacy variable names for backwards compatibility
+FINAL_API_KEY="${CLI_API_KEY:-${ARMCHAIR_MODEL_API_KEY:-${OPENAI_API_KEY:-${ANTHROPIC_API_KEY:-${API_KEY}}}}}"
 FINAL_API_BASE_URL="${CLI_API_BASE_URL:-${ARMCHAIR_MODEL_API_BASE_URL}}"
 FINAL_MODEL_NAME="${CLI_MODEL_NAME:-${ARMCHAIR_MODEL_NAME}}"
 
@@ -175,7 +176,7 @@ if [ -z "$NO_LLM" ]; then
     missing_params=()
 
     if [ -z "$FINAL_API_KEY" ]; then
-        missing_params+=("API key (--api-key or OPENAI_API_KEY/ANTHROPIC_API_KEY/API_KEY)")
+        missing_params+=("API key (--api-key or ARMCHAIR_MODEL_API_KEY)")
     fi
 
     if [ -z "$FINAL_API_BASE_URL" ]; then
@@ -246,11 +247,10 @@ DOCKER_CMD="$DOCKER_CMD -e OUTPUT_PATH=/app/output"
 
 # Add LLM configuration if not in --no-llm mode
 if [ -z "$NO_LLM" ]; then
-    # Pass the final merged values to the container
-    DOCKER_CMD="$DOCKER_CMD -e OPENAI_API_KEY=\"$FINAL_API_KEY\""
-    DOCKER_CMD="$DOCKER_CMD -e API_KEY=\"$FINAL_API_KEY\""
-    DOCKER_CMD="$DOCKER_CMD -e API_BASE_URL=\"$FINAL_API_BASE_URL\""
-    DOCKER_CMD="$DOCKER_CMD -e MODEL_NAME=\"$FINAL_MODEL_NAME\""
+    # Pass the final merged values to the container using the primary variable name
+    DOCKER_CMD="$DOCKER_CMD -e ARMCHAIR_MODEL_API_KEY=\"$FINAL_API_KEY\""
+    DOCKER_CMD="$DOCKER_CMD -e ARMCHAIR_MODEL_API_BASE_URL=\"$FINAL_API_BASE_URL\""
+    DOCKER_CMD="$DOCKER_CMD -e ARMCHAIR_MODEL_NAME=\"$FINAL_MODEL_NAME\""
 fi
 
 DOCKER_CMD="$DOCKER_CMD $DOCKER_IMAGE"

@@ -129,14 +129,22 @@ echo ""
 
 while true; do
     read -p "Enter your choice (1-3): " api_choice
-    
+
     case $api_choice in
         1)
             echo "✅ Using Claude API"
             MODEL_API_TYPE="claude"
-            # Don't set any model variables for Claude
-            unset MODEL_API_BASE_URL
-            unset MODEL_NAME
+            MODEL_API_BASE_URL="https://api.anthropic.com/v1"
+            read -p "Enter Claude model name (e.g., claude-3-5-sonnet-20241022): " MODEL_NAME
+            if [ -z "$MODEL_NAME" ]; then
+                echo "❌ Model name cannot be empty"
+                continue
+            fi
+            read -p "Enter your Anthropic API key: " MODEL_API_KEY
+            if [ -z "$MODEL_API_KEY" ]; then
+                echo "❌ API key cannot be empty"
+                continue
+            fi
             break
             ;;
         2)
@@ -146,6 +154,11 @@ while true; do
             read -p "Enter OpenAI model name (e.g., gpt-4o, gpt-3.5-turbo): " MODEL_NAME
             if [ -z "$MODEL_NAME" ]; then
                 echo "❌ Model name cannot be empty"
+                continue
+            fi
+            read -p "Enter your OpenAI API key: " MODEL_API_KEY
+            if [ -z "$MODEL_API_KEY" ]; then
+                echo "❌ API key cannot be empty"
                 continue
             fi
             break
@@ -161,6 +174,11 @@ while true; do
             read -p "Enter model name: " MODEL_NAME
             if [ -z "$MODEL_NAME" ]; then
                 echo "❌ Model name cannot be empty"
+                continue
+            fi
+            read -p "Enter your API key: " MODEL_API_KEY
+            if [ -z "$MODEL_API_KEY" ]; then
+                echo "❌ API key cannot be empty"
                 continue
             fi
             break
@@ -246,12 +264,16 @@ export ARMCHAIR_HOME="$ARMCHAIR_HOME"
 export ARMCHAIR_SOURCE_YAML="$CONFIG_FILE"
 export ARMCHAIR_FS_MAP="$FS_MAP"
 EOF
-            
+
             # Add model configuration variables only if they are set
+            if [ ! -z "$MODEL_API_KEY" ]; then
+                echo "export ARMCHAIR_MODEL_API_KEY=\"$MODEL_API_KEY\"" >> "$ENV_FILE"
+            fi
+
             if [ ! -z "$MODEL_API_BASE_URL" ]; then
                 echo "export ARMCHAIR_MODEL_API_BASE_URL=\"$MODEL_API_BASE_URL\"" >> "$ENV_FILE"
             fi
-            
+
             if [ ! -z "$MODEL_NAME" ]; then
                 echo "export ARMCHAIR_MODEL_NAME=\"$MODEL_NAME\"" >> "$ENV_FILE"
             fi
@@ -410,12 +432,16 @@ export ARMCHAIR_HOME="$ARMCHAIR_HOME"
 export ARMCHAIR_SOURCE_YAML="$CONFIG_FILE"
 export ARMCHAIR_FS_MAP="$FS_MAP"
 EOF
-    
+
     # Add model configuration variables only if they are set
+    if [ ! -z "$MODEL_API_KEY" ]; then
+        echo "export ARMCHAIR_MODEL_API_KEY=\"$MODEL_API_KEY\"" >> "$ENV_FILE"
+    fi
+
     if [ ! -z "$MODEL_API_BASE_URL" ]; then
         echo "export ARMCHAIR_MODEL_API_BASE_URL=\"$MODEL_API_BASE_URL\"" >> "$ENV_FILE"
     fi
-    
+
     if [ ! -z "$MODEL_NAME" ]; then
         echo "export ARMCHAIR_MODEL_NAME=\"$MODEL_NAME\"" >> "$ENV_FILE"
     fi
@@ -461,12 +487,16 @@ else
 export ARMCHAIR_HOME="$ARMCHAIR_HOME"
 export ARMCHAIR_SOURCE_YAML="$ARMCHAIR_SOURCE_YAML"
 EOF
-    
+
     # Add model configuration variables if they were set
+    if [ ! -z "$MODEL_API_KEY" ]; then
+        echo "export ARMCHAIR_MODEL_API_KEY=\"$MODEL_API_KEY\"" >> "$ENV_FILE"
+    fi
+
     if [ ! -z "$MODEL_API_BASE_URL" ]; then
         echo "export ARMCHAIR_MODEL_API_BASE_URL=\"$MODEL_API_BASE_URL\"" >> "$ENV_FILE"
     fi
-    
+
     if [ ! -z "$MODEL_NAME" ]; then
         echo "export ARMCHAIR_MODEL_NAME=\"$MODEL_NAME\"" >> "$ENV_FILE"
     fi
