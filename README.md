@@ -6,18 +6,19 @@ Currently we are releasing v0 of our first two tools.
 
 ## Tools
 
-### 🔄 Splitter Agent
-The **Splitter Agent** breaks down commits (or uncommitted changes) into logical chunks for easier analysis. It can:
-- Processes source code from multiple repositories
-- Identifies code structures and relationships  
-- Generates structured output for downstream analysis
-- Supports multiple programming languages
-
-### 🌐 Explainer UI
-The **Explainer UI** provides a web-based interface for exploring and understanding code changes. It:
+### 🌐 Armchair Dashboard
+The **Armchair Dashboard** provides a web-based interface for exploring and understanding code changes. It:
 - Visualizes code analysis results from the Splitter Agent
 - Provides an interactive frontend for navigating code explanations
-- http://localhost:8686
+- Enables running splitter analysis directly from the UI
+- Available at http://localhost:8686
+
+### 🔄 Splitter Agent
+The **Splitter Agent** breaks down commits (or uncommitted changes) into logical chunks for easier analysis. It can:
+- Process source code from multiple repositories
+- Identify code structures and relationships
+- Generate structured output for downstream analysis
+- Support multiple programming languages
 
 ## Quick Start
 
@@ -46,12 +47,26 @@ This script will:
 - Create your Armchair workspace directory
 - Configure repository paths and mappings
 - Set up source.yaml configuration
+- Configure your LLM provider (API key, base URL, model name)
 - Generate environment variables file
 
 Follow the prompts to:
 - Verify your `ARMCHAIR_HOME` directory
 - Add repositories you want to analyze
-- Configure your API key (supports any OpenAI-compatible API)
+- Choose your LLM provider and configure (supports any OpenAI-compatible API):
+  - **API Base URL** - The endpoint for your LLM service
+  - **Model Name** - The specific model to use
+  - **API Key** - Your authentication key
+
+**Common API Base URLs:**
+- Claude (Anthropic): `https://api.anthropic.com/v1`
+- OpenAI: `https://api.openai.com/v1`
+- Ollama (local): `http://localhost:11434/v1`
+
+**Common Model Names:**
+- Claude: `claude-3-5-sonnet-20241022`
+- OpenAI: `gpt-4o-mini`, `gpt-4o`
+- Ollama: `qwen2.5-coder:32b`, `deepseek-coder-v2:16b`, `llama3.1:8b`
 
 ### 2. Load Environment
 
@@ -62,45 +77,48 @@ Source the generated environment file:
 source $ARMCHAIR_HOME/armchair_env.sh
 ```
 
-### 3. Start Explainer
+### 3. Start Armchair Dashboard
 
-Run the explainer script, which launches a Docker container with both the Splitter Agent and Explainer UI:
+Run the dashboard script, which launches a Docker container with Armchair Dashboard and all the ArmChair tools:
 
 ```bash
-# Start with LLM support for semantic analysis and grouping + annotating changes
+# Start the dashboard (uses environment variables from setup)
+./scripts/run_explainer.sh
+
+# You can override with command line options
 ./scripts/run_explainer.sh \
   --api-key YOUR_API_KEY \
   --api-base-url https://api.anthropic.com/v1 \
   --model-name claude-3-5-sonnet-20241022
 ```
 
-The explainer will be available at:
-- **Frontend UI:** http://localhost:8686
+The dashboard will be available at:
+- **Frontend Dashboard:** http://localhost:8686
 - **Backend API:** http://localhost:8787
 
 Use the web interface to:
 - Browse and analyze your code repositories
 - Run the splitter agent on commits or uncommitted changes
-- Explore code the separate patches and annotated changes in each.
+- Explore the separate patches and annotated changes in each
 
 **Common Options:**
-- `--api-key KEY` - API key for LLM service
-- `--api-base-url URL` - API base URL (e.g., `https://api.openai.com/v1` or `https://api.anthropic.com/v1`)
-- `--model-name MODEL` - Model name (e.g., `gpt-4`, `claude-3-5-sonnet-20241022`)
+- `--api-key KEY` - API key for LLM service (optional if set in environment)
+- `--api-base-url URL` - API base URL (optional if set in environment)
+- `--model-name MODEL` - Model name (optional if set in environment)
 - `--port-frontend PORT` - Frontend UI port (default: 8686)
 - `--port-backend PORT` - Backend API port (default: 8787)
-- `--no-llm` - Will run splitter without LLM support (no semantic analysis, annotation). Not recommended
+- `--no-llm` - Run without LLM support (not recommended)
 - `--help, -h` - Show full help message
 
-**Note:** LLM configuration can also be set via environment variables:
-- `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` or `API_KEY`
-- `ARMCHAIR_MODEL_API_BASE_URL`
-- `ARMCHAIR_MODEL_NAME`
+**Note:** If you completed step 1 (setup), the environment variables are already configured:
+- `ARMCHAIR_MODEL_API_KEY` - Your API key
+- `ARMCHAIR_MODEL_API_BASE_URL` - Your API base URL
+- `ARMCHAIR_MODEL_NAME` - Your model name
 
 ### 4. Trigger Analysis via API
 
-Once the explainer docker is running, you can trigger splitter from the UI for a commit or uncommitted changes.
-If you need direct access to the splitter agent, trigger the agent via the backend API:
+Once the dashboard is running, you can trigger splitter analysis from the UI for any commit or uncommitted changes.
+If you need direct access to the splitter agent programmatically, trigger it via the backend API:
 
 ```bash
 # Split a specific commit
@@ -206,7 +224,7 @@ If you prefer to run the Splitter Agent as a standalone command-line tool (witho
 ### Output
 
 The splitter generates structured analysis output in `$ARMCHAIR_OUTPUT`, which can be:
-- Viewed using the Explainer UI
+- Viewed using the Armchair Dashboard
 - Processed by other tools
 - Committed to version control for historical tracking
 
@@ -227,9 +245,9 @@ Runs the Splitter Agent to analyze code changes:
 - Generates structured analysis output
 
 ### `scripts/run_explainer.sh`
-Starts the Explainer UI with proper Docker configuration:
+Starts the Armchair Dashboard with proper Docker configuration:
 - Validates environment variables
-- Supports both LLM-enabled and view-only modes
+- Supports LLM-powered semantic analysis and code explanations
 - Manages container lifecycle
 - Configurable ports and Docker images
 - Provides helpful status messages
@@ -254,34 +272,34 @@ docker run --rm \
   --source-config /config/source.yaml
 ```
 
-### Explainer (Splitter + UI combined)
+### Armchair Dashboard (Splitter + Dashboard combined)
+
+**With LLM support (recommended):**
+```bash
+docker run -d \
+  --name armchair-dashboard \
+  -p 8686:8686 -p 8787:8787 \
+  -v "$(dirname $ARMCHAIR_SOURCE_YAML):/app/config:ro" \
+  -v "$ARMCHAIR_OUTPUT:/app/output" \
+  -v "your_git_root:/workspace1" \
+  -e CONFIG_PATH=/app/config/source.yaml \
+  -e OUTPUT_PATH=/app/output \
+  -e ARMCHAIR_MODEL_API_KEY=your_api_key \
+  -e ARMCHAIR_MODEL_API_BASE_URL=https://api.anthropic.com/v1 \
+  -e ARMCHAIR_MODEL_NAME=claude-3-5-sonnet-20241022 \
+  armchr/explainer:latest
+```
 
 **Without LLM support (view-only mode):**
 ```bash
 docker run -d \
-  --name armchair-explainer \
+  --name armchair-dashboard \
   -p 8686:8686 -p 8787:8787 \
   -v "$(dirname $ARMCHAIR_SOURCE_YAML):/app/config:ro" \
   -v "$ARMCHAIR_OUTPUT:/app/output" \
-  -v "your_git_root:/workspace1:ro" \
+  -v "your_git_root:/workspace1" \
   -e CONFIG_PATH=/app/config/source.yaml \
   -e OUTPUT_PATH=/app/output \
-  armchr/explainer:latest
-```
-
-**With LLM support (interactive chat enabled):**
-```bash
-docker run -d \
-  --name armchair-explainer \
-  -p 8686:8686 -p 8787:8787 \
-  -v "$(dirname $ARMCHAIR_SOURCE_YAML):/app/config:ro" \
-  -v "$ARMCHAIR_OUTPUT:/app/output" \
-  -v "your_git_root:/workspace1:ro" \
-  -e CONFIG_PATH=/app/config/source.yaml \
-  -e OUTPUT_PATH=/app/output \
-  -e API_KEY=your_api_key \
-  -e API_BASE_URL=https://api.anthropic.com/v1 \
-  -e MODEL_NAME=claude-3-5-sonnet-20241022 \
   armchr/explainer:latest
 ```
 
@@ -295,8 +313,8 @@ docker run -d \
 ### Docker Issues
 - Verify Docker is running: `docker info`
 - Check if images exist: `docker images | grep armchr`
-- Review container logs: `docker logs armchair-explainer`
-- Stop and remove stale containers: `docker stop armchair-explainer && docker rm armchair-explainer`
+- Review container logs: `docker logs armchair-dashboard`
+- Stop and remove stale containers: `docker stop armchair-dashboard && docker rm armchair-dashboard`
 
 ### Configuration Issues
 - Validate source.yaml syntax
@@ -308,4 +326,5 @@ docker run -d \
 - Check API key is valid and not expired
 - Verify API base URL is correct for your provider
 - Ensure model name matches what your API provider supports
-- Review backend logs for API-related errors: `docker logs armchair-explainer`
+- Review backend logs for API-related errors: `docker logs armchair-dashboard`
+- Test API connectivity: `curl -X GET http://localhost:8787/api/health`
