@@ -110,10 +110,14 @@ Use the web interface to:
 - `--no-llm` - Run without LLM support (not recommended)
 - `--help, -h` - Show full help message
 
-**Note:** If you completed step 1 (setup), the environment variables are already configured:
+**Note:** If you completed step 1 (setup), the following environment variables are already configured in `$ARMCHAIR_HOME/armchair_env.sh`:
+- `ARMCHAIR_HOME` - Your workspace directory
+- `ARMCHAIR_SOURCE_YAML` - Path to source.yaml configuration
+- `ARMCHAIR_FS_MAP` - Docker volume mappings for your repositories
+- `ARMCHAIR_OUTPUT` - Output directory for analysis results
 - `ARMCHAIR_MODEL_API_KEY` - Your API key
-- `ARMCHAIR_MODEL_API_BASE_URL` - Your API base URL
-- `ARMCHAIR_MODEL_NAME` - Your model name
+- `ARMCHAIR_MODEL_API_BASE_URL` - Your API base URL (e.g., https://api.anthropic.com/v1)
+- `ARMCHAIR_MODEL_NAME` - Your model name (e.g., claude-3-5-sonnet-20241022)
 
 **Performance Tip for Large Repositories:**
 
