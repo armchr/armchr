@@ -68,6 +68,9 @@ Follow the prompts to:
 - OpenAI: `gpt-4o-mini`, `gpt-4o`
 - Ollama: `qwen2.5-coder:32b`, `deepseek-coder-v2:16b`, `llama3.1:8b`
 
+**Note for Local LLM Services (Ollama, etc.):**
+When using a local LLM service on macOS or Windows, you can use `localhost` or `127.0.0.1` in your API base URL (e.g., `http://localhost:11434/v1`). The run script will automatically replace it with `host.docker.internal` to allow the Docker container to access services running on your host machine.
+
 ### 2. Load Environment
 
 Source the generated environment file:
@@ -104,6 +107,7 @@ Use the web interface to:
 **Common Options:**
 - `--api-key KEY` - API key for LLM service (optional if set in environment)
 - `--api-base-url URL` - API base URL (optional if set in environment)
+  - For local services (Ollama), use `http://localhost:11434/v1` - automatically converted to `host.docker.internal` on Mac/Windows
 - `--model-name MODEL` - Model name (optional if set in environment)
 - `--port-frontend PORT` - Frontend UI port (default: 8686)
 - `--port-backend PORT` - Backend API port (default: 8787)

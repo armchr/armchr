@@ -169,6 +169,23 @@ FINAL_API_KEY="${CLI_API_KEY:-${ARMCHAIR_MODEL_API_KEY:-${OPENAI_API_KEY:-${ANTH
 FINAL_API_BASE_URL="${CLI_API_BASE_URL:-${ARMCHAIR_MODEL_API_BASE_URL}}"
 FINAL_MODEL_NAME="${CLI_MODEL_NAME:-${ARMCHAIR_MODEL_NAME}}"
 
+# Replace localhost/127.0.0.1 with host.docker.internal for Docker on Mac/Windows
+# This allows the container to access services running on the host machine
+OS_TYPE=$(uname -s)
+if [[ "$OS_TYPE" == "Darwin" ]] || [[ "$OS_TYPE" == MINGW* ]] || [[ "$OS_TYPE" == MSYS* ]] || [[ "$OS_TYPE" == CYGWIN* ]]; then
+    if [ ! -z "$FINAL_API_BASE_URL" ]; then
+        # Replace localhost with host.docker.internal
+        FINAL_API_BASE_URL="${FINAL_API_BASE_URL//localhost/host.docker.internal}"
+        # Replace 127.0.0.1 with host.docker.internal
+        FINAL_API_BASE_URL="${FINAL_API_BASE_URL//127.0.0.1/host.docker.internal}"
+
+        if [[ "$FINAL_API_BASE_URL" == *"host.docker.internal"* ]]; then
+            echo "ℹ️  Detected localhost/127.0.0.1 in API base URL"
+            echo "   Replaced with host.docker.internal for Docker compatibility"
+        fi
+    fi
+fi
+
 # Validate LLM configuration
 if [ -z "$NO_LLM" ]; then
     echo "🤖 LLM mode enabled - validating configuration..."
