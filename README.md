@@ -115,6 +115,29 @@ Use the web interface to:
 - `ARMCHAIR_MODEL_API_BASE_URL` - Your API base URL
 - `ARMCHAIR_MODEL_NAME` - Your model name
 
+**Performance Tip for Large Repositories:**
+
+For very large repositories, the dashboard can be slow when loading unstaged/untracked files. You can improve performance by adding `commitOnly: true` to specific repositories in your `source.yaml`:
+
+```yaml
+source:
+  repositories:
+    - name: "large-repo"
+      path: "/workspace1/large-repo"
+      language: "multi"
+      commitOnly: true  # Skip unstaged/untracked files for better performance
+    - name: "normal-repo"
+      path: "/workspace1/normal-repo"
+      language: "multi"
+      # commitOnly defaults to false
+```
+
+When `commitOnly: true` is set:
+- All commits and branches remain available for exploration and analysis
+- Unstaged and untracked files are not loaded in the dashboard
+- Dashboard loads significantly faster for very large repositories
+- You can still analyze specific commits via the UI or API
+
 ### 4. Trigger Analysis via API
 
 Once the dashboard is running, you can trigger splitter analysis from the UI for any commit or uncommitted changes.
