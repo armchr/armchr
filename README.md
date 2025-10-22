@@ -66,7 +66,7 @@ Follow the prompts to:
 **Common Model Names:**
 - Claude: `claude-3-5-sonnet-20241022`
 - OpenAI: `gpt-4o-mini`, `gpt-4o`
-- Ollama: `qwen2.5-coder:32b`, `deepseek-coder-v2:16b`, `llama3.1:8b`
+- Ollama: `qwen3-coder:30b`, `qwen2.5-coder:32b`, `deepseek-coder-v2:16b`, `llama3.1:8b`
 
 **Note for Local LLM Services (Ollama, etc.):**
 When using a local LLM service on macOS or Windows, you can use `localhost` or `127.0.0.1` in your API base URL (e.g., `http://localhost:11434/v1`). The run script will automatically replace it with `host.docker.internal` to allow the Docker container to access services running on your host machine.
