@@ -1,0 +1,30 @@
+# Example configuration file for Code Splitter Agent
+# Copy this file to config.yaml and customize
+
+# API Configuration
+api_key: "your-api-key-here"  # Or set OPENAI_API_KEY environment variable
+api_base: null                 # Optional: Custom API base URL
+model: "gpt-4"                 # Model to use for LLM analysis
+
+# Output Configuration
+output_dir: "./diff_splits"    # Where to write generated patches
+target_size: 200               # Target lines per patch
+
+# LLM Configuration
+use_llm: true                  # Enable/disable LLM features
+
+# Repository Configuration (optional)
+# Used with --source-config option
+repositories:
+  - name: "my-project"
+    path: "/path/to/my-project"
+  - name: "another-project"
+    path: "/path/to/another-project"
+
+# Logging Configuration (optional)
+verbose: false
+debug: false
+log_file: null
+
+# Patch Generation Options
+annotate_patches: true         # Add descriptive comments to patches

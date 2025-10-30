@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  code-splitter:
+    build: .
+    image: code-splitter-agent:latest
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - API_BASE_URL=${API_BASE_URL:-}
+      - MODEL_NAME=${MODEL_NAME:-gpt-4}
+    volumes:
+      # Mount config directory
+      - ${CONFIG_DIR:-./config}:/config:ro
+      # Mount output directory
+      - ${OUTPUT_DIR:-./output}:/output
+      # Mount source repositories (customize these)
+      - ${REPO_PATH:-/path/to/repo}:/repos/myrepo:ro
+    command: >
+      --repo myrepo
+      --source-config /config/source.yaml
+      --output-dir /output
+      --verbose

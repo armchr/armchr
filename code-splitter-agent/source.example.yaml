@@ -1,0 +1,24 @@
+# Example source repositories configuration file
+# Copy this file to source.yaml and customize with your repositories
+
+# List of repositories
+repositories:
+  - name: "my-project"
+    path: "/Users/username/projects/my-project"
+    description: "Main project repository"
+
+  - name: "backend"
+    path: "/Users/username/projects/backend-service"
+    description: "Backend service"
+
+  - name: "frontend"
+    path: "/Users/username/projects/frontend-app"
+    description: "Frontend application"
+
+# Alternative structure (also supported)
+# source:
+#   repositories:
+#     - name: "project1"
+#       path: "/path/to/project1"
+#     - name: "project2"
+#       path: "/path/to/project2"
