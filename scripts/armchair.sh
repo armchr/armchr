@@ -86,7 +86,63 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Set up directories
-ARMCHAIR_HOME="$HOME"
+echo "📁 Workspace Configuration"
+echo "=========================="
+echo ""
+echo "Armchair needs access to your file system to analyze code repositories."
+echo ""
+echo "⚠️  Important Privacy Notice:"
+echo "   • Docker Desktop may ask for permission to access your files"
+echo "   • Armchair only reads repositories you explicitly configure in the UI"
+echo "   • Only specific code files you select are sent to your configured LLM"
+echo "   • No files are sent to Armchair servers - all processing is local"
+echo ""
+echo "Armchair will create a '.armchair_output' directory to store all output"
+echo "and temporary files. Choose where to create this directory:"
+echo ""
+echo "1) Use home directory: $HOME/.armchair_output"
+echo "2) Specify custom path"
+echo ""
+
+while true; do
+    read -p "Enter your choice (1-2): " workspace_choice
+
+    case $workspace_choice in
+        1)
+            ARMCHAIR_HOME="$HOME"
+            echo "✅ Using home directory: $ARMCHAIR_HOME"
+            break
+            ;;
+        2)
+            read -p "Enter custom workspace path: " custom_path
+            if [ -z "$custom_path" ]; then
+                echo "❌ Path cannot be empty"
+                continue
+            fi
+            # Expand tilde to home directory
+            custom_path="${custom_path/#\~/$HOME}"
+
+            if [ ! -d "$custom_path" ]; then
+                echo "⚠️  Directory does not exist: $custom_path"
+                read -p "Create it? (y/n): " create_dir
+                if [ "$create_dir" != "y" ] && [ "$create_dir" != "Y" ]; then
+                    continue
+                fi
+                mkdir -p "$custom_path"
+            fi
+
+            ARMCHAIR_HOME="$custom_path"
+            echo "✅ Using custom workspace: $ARMCHAIR_HOME"
+            break
+            ;;
+        *)
+            echo "❌ Invalid choice. Please enter 1 or 2."
+            ;;
+    esac
+done
+
+echo ""
+
 ARMCHAIR_OUTPUT="$ARMCHAIR_HOME/.armchair_output"
 
 # Create output directory if it doesn't exist
@@ -180,7 +236,7 @@ fi
 
 DOCKER_CMD="$DOCKER_CMD -p $PORT_FRONTEND:8686"
 DOCKER_CMD="$DOCKER_CMD -p $PORT_BACKEND:8787"
-DOCKER_CMD="$DOCKER_CMD -v \"$ARMCHAIR_HOME:/workspace\""
+DOCKER_CMD="$DOCKER_CMD -v \"$ARMCHAIR_HOME:/workspace:ro\""
 DOCKER_CMD="$DOCKER_CMD -v \"$ARMCHAIR_OUTPUT:/app/output\""
 
 # Add LLM configuration if available
@@ -218,6 +274,13 @@ if [ ! -z "$DETACHED" ]; then
     echo ""
     echo "✅ Armchair Dashboard is now running!"
     echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "🌐 Frontend Dashboard: http://localhost:$PORT_FRONTEND"
+    echo "🔌 Backend API:        http://localhost:$PORT_BACKEND"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "📂 Output directory: $ARMCHAIR_OUTPUT"
+    echo ""
     echo "💡 Management commands:"
     echo "   View logs:    docker logs $CONTAINER_NAME"
     echo "   Follow logs:  docker logs -f $CONTAINER_NAME"
@@ -225,9 +288,26 @@ if [ ! -z "$DETACHED" ]; then
     echo "   Start:        docker start $CONTAINER_NAME"
     echo "   Remove:       docker rm $CONTAINER_NAME"
     echo ""
-    echo "🌐 Frontend Dashboard: http://localhost:$PORT_FRONTEND"
-    echo "🔌 Backend API: http://localhost:$PORT_BACKEND"
-    echo "📂 Output directory: $ARMCHAIR_OUTPUT"
+
+    # Open browser
+    FRONTEND_URL="http://localhost:$PORT_FRONTEND"
+    echo "🚀 Opening dashboard in your browser..."
+
+    # Detect OS and open browser
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS
+        open "$FRONTEND_URL"
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        # Linux
+        if command -v xdg-open > /dev/null; then
+            xdg-open "$FRONTEND_URL"
+        elif command -v gnome-open > /dev/null; then
+            gnome-open "$FRONTEND_URL"
+        fi
+    elif [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "cygwin" ]]; then
+        # Windows
+        start "$FRONTEND_URL"
+    fi
 else
     echo ""
     echo "✅ Armchair Dashboard execution completed!"
