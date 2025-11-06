@@ -26,82 +26,85 @@ The easiest way to run Armchair is using the Docker image. Follow these steps to
 ### Prerequisites
 
 - Docker installed and running
-- API key for Claude (Anthropic) or OpenAI or your local LLM. Expects OpenAI compatible API (Ollama etc.)
-- Local directory path to Git repositories you want to analyze
+- (Optional) API key for Claude (Anthropic), OpenAI, or your local LLM for AI-powered features
 
-### First Time Setup and Run
+### Run Armchair
 
-1. Set the `ARMCHAIR_HOME` environment variable to the directory where this file is:
-
-```bash
-export ARMCHAIR_HOME=/path/to/armchr
-```
-
-2. Run the Armchair script (it will automatically configure and start):
+Simply run the Armchair script:
 
 ```bash
 ./scripts/armchair.sh
 ```
 
 The script will:
-- Detect that configuration is needed and run interactive setup
-- Prompt you to choose your LLM provider:
-  - **Option 1: Claude (Anthropic)** - `https://api.anthropic.com/v1`
-  - **Option 2: OpenAI** - `https://api.openai.com/v1`
-  - **Option 3: Other (Ollama, etc.)** - `http://localhost:11434/v1` (On Mac/Windows use http://host.docker.internal:11434/v1 instead).
-- Ask for your model name and API key
-- Configure repository paths and mappings
-- Generate `armchair_env.sh` with your configuration
-- Pull required Docker images
-- Automatically start the Armchair Dashboard
+- Prompt you to choose a workspace location (your home directory or a custom path)
+- Create a `.armchair_output` directory to store analysis results and temporary files
+- Start the Armchair Dashboard in Docker
+- Automatically open the dashboard in your browser at http://localhost:8686
 
-**Common Model Names:**
-- Claude: `claude-3-5-sonnet-20241022`
-- OpenAI: `gpt-4o-mini`, `gpt-4o`
-- Ollama: `qwen3-coder:30b`, `qwen2.5-coder:32b`, `deepseek-coder-v2:16b`, `llama3.1:8b`
+**Privacy Notice:**
+Docker Desktop may ask for permission to access your files. This is required because:
+- Armchair needs to read repositories you explicitly configure in the UI
+- Only specific code files you select are sent to your configured LLM
+- No files are sent to Armchair servers - all processing is local
 
-**Note for Local LLM Services (Ollama, etc.):**
-When using a local LLM service on macOS or Windows, you can use `localhost` or `127.0.0.1` in your API base URL (e.g., `http://localhost:11434/v1`). The script will automatically replace it with `host.docker.internal` to allow the Docker container to access services running on your host machine.
+### Configuring LLM (Optional)
 
-### Subsequent Starts
-
-After the first start, if you need to update the docker image or restart ArmChair, you can skip configuration by loading your environment first:
+You can configure LLM settings via environment variables before running the script:
 
 ```bash
-# Load saved configuration
-source $ARMCHAIR_HOME/armchair_env.sh
+# For Claude (Anthropic)
+export ARMCHAIR_MODEL_API_KEY="your-api-key"
+export ARMCHAIR_MODEL_API_BASE_URL="https://api.anthropic.com/v1"
+export ARMCHAIR_MODEL_NAME="claude-3-5-sonnet-20241022"
 
-# Start the dashboard
+# For OpenAI
+export ARMCHAIR_MODEL_API_KEY="your-api-key"
+export ARMCHAIR_MODEL_API_BASE_URL="https://api.openai.com/v1"
+export ARMCHAIR_MODEL_NAME="gpt-4o"
+
+# For Ollama (local)
+export ARMCHAIR_MODEL_API_BASE_URL="http://localhost:11434/v1"
+export ARMCHAIR_MODEL_NAME="qwen2.5-coder:32b"
+# API key not required for Ollama
+
 ./scripts/armchair.sh
 ```
 
-The script will detect existing configuration and skip setup, going directly to starting the dashboard.
+Alternatively, you can configure LLM settings through the Settings dialog in the UI after the dashboard starts.
 
-### Dashboard Access
+**Common Model Names:**
+- Claude: `claude-3-5-sonnet-20241022`, `claude-3-5-haiku-20241022`
+- OpenAI: `gpt-4o`, `gpt-4o-mini`
+- Ollama: `qwen2.5-coder:32b`, `deepseek-coder-v2:16b`, `llama3.1:8b`
 
-Once running, the dashboard will be available at:
-- **Frontend Dashboard:** http://localhost:8686
-- **Backend API:** http://localhost:8787
+**Note for Local LLM Services (Ollama, etc.):**
+When using a local LLM service on macOS or Windows, you can use `localhost` or `127.0.0.1` in your API base URL (e.g., `http://localhost:11434/v1`). The script will automatically convert it to `host.docker.internal` for Docker compatibility.
 
-Use the web interface to:
-- Browse and analyze your code repositories
-- Run the splitter agent on commits or uncommitted changes
-- Explore the separate patches and annotated changes in each
+### Using the Dashboard
+
+Once the dashboard opens in your browser (http://localhost:8686), you can:
+
+1. **Configure Repositories:** Add repositories you want to analyze via the Settings menu
+2. **Configure LLM:** Set up your AI model if you haven't already via environment variables
+3. **Browse Code:** Navigate branches, commits, and uncommitted changes
+4. **Run Analysis:** Use the splitter agent to break down commits into logical chunks
+5. **Explore Results:** View the separate patches and annotated changes
+
+**Backend API:** Available at http://localhost:8787 for programmatic access
 
 **Performance Tip for Large Repositories:**
 
-For very very large repositories, the dashboard can be slow when loading unstaged/untracked files. You can improve performance by adding `commitOnly: true` to specific repositories in your `source.yaml`:
+For very large repositories, the dashboard can be slow when loading unstaged/untracked files. You can improve performance by adding `commitOnly: true` to specific repositories in your configuration via the Settings UI or by editing `~/.armchair_output/.armchair/source.yaml`:
 
 ```yaml
 source:
   repositories:
     - name: "large-repo"
-      path: "/workspace1/large-repo"
-      language: "multi"
+      path: "/Users/yourname/projects/large-repo"
       commitOnly: true  # Skip unstaged/untracked files for better performance
     - name: "normal-repo"
-      path: "/workspace1/normal-repo"
-      language: "multi"
+      path: "/Users/yourname/projects/normal-repo"
       # commitOnly defaults to false
 ```
 
@@ -115,34 +118,29 @@ When `commitOnly: true` is set:
 ### Advanced Options
 
 ```bash
-# Force reconfiguration
-./scripts/armchair.sh --reconfigure
-
-# Override LLM settings
-./scripts/armchair.sh \
-  --api-key YOUR_API_KEY \
-  --api-base-url https://api.anthropic.com/v1 \
-  --model-name claude-3-5-sonnet-20241022
-
-# Run in foreground mode (see logs)
+# Run in foreground mode (see logs in terminal)
 ./scripts/armchair.sh --foreground
 
 # Use custom ports
 ./scripts/armchair.sh --port-frontend 3000 --port-backend 3001
+
+# Use local Docker image (for development)
+./scripts/armchair.sh --local
+
+# Use custom Docker image
+./scripts/armchair.sh --image my-custom-image:tag
 
 # Show help
 ./scripts/armchair.sh --help
 ```
 
 **Available Options:**
-- `--api-key KEY` - Override API key from environment
-- `--api-base-url URL` - Override API base URL from environment
-- `--model-name MODEL` - Override model name from environment
 - `--port-frontend PORT` - Frontend UI port (default: 8686)
 - `--port-backend PORT` - Backend API port (default: 8787)
-- `--foreground, -f` - Run in foreground mode (shows logs)
-- `--no-llm` - Run without LLM support (not recommended)
-- `--reconfigure` - Force reconfiguration
+- `--foreground, -f` - Run in foreground mode (shows logs in terminal)
+- `--name NAME` - Custom container name (default: armchair-dashboard)
+- `--local` - Use local image 'explainer:latest'
+- `--image IMAGE` - Use custom Docker image
 - `--help, -h` - Show full help message
 
 ### Management Commands
@@ -213,22 +211,35 @@ curl http://localhost:8787/api/repositories/my-repo/branches/main/working-direct
 ## Configuration
 
 ### Repository Setup
-The setup script automatically handles:
-- **Git Root Detection**: Finds the root directory of each git repository
-- **Workspace Mapping**: Maps git roots to workspaces (workspace1, workspace2, etc.)
-- **Relative Paths**: Calculates paths relative to git roots for proper mounting
+Repositories are configured through the Settings UI in the dashboard. The configuration is stored in `~/.armchair_output/.armchair/source.yaml`.
 
-### Environment Variables
-Key environment variables set by the setup:
-- `ARMCHAIR_HOME`: Your workspace directory
-- `ARMCHAIR_SOURCE_YAML`: Path to source configuration
-- `ARMCHAIR_OUTPUT`: Output directory for analysis results
-- `ARMCHAIR_FS_MAP`: File system mappings for Docker volumes
+### LLM Configuration
+LLM settings can be configured in two ways:
 
-### Docker Volume Mapping
-The system uses the following volume mapping strategy:
-- **File System Map**: `git_root_path:/workspace1` (maps entire git repositories)
-- **Source Config**: Uses workspace-relative paths like `/workspace1/subfolder`
+1. **Via Environment Variables** (before starting):
+```bash
+export ARMCHAIR_MODEL_API_KEY="your-api-key"
+export ARMCHAIR_MODEL_API_BASE_URL="https://api.anthropic.com/v1"
+export ARMCHAIR_MODEL_NAME="claude-3-5-sonnet-20241022"
+./scripts/armchair.sh
+```
+
+2. **Via Settings UI** (after starting):
+   - Open the dashboard at http://localhost:8686
+   - Click on the Settings menu
+   - Configure your LLM provider, API key, and model
+
+Settings are stored in `~/.armchair_output/.armchair/.armchair.json`.
+
+### Output Directory Structure
+```
+~/.armchair_output/
+  .armchair/
+    source.yaml         # Repository configuration
+    .armchair.json      # LLM settings
+  commit_*/             # Split patches from analysis
+  reviews/              # Code reviews
+```
 
 ## Running Splitter Agent as Command-Line Tool
 
@@ -280,121 +291,85 @@ The splitter generates structured analysis output in `$ARMCHAIR_OUTPUT`, which c
 ## Scripts
 
 ### `scripts/armchair.sh`
-The main Armchair script that automatically sets up and runs the dashboard:
-
-**Intelligent Setup Detection:**
-- Automatically detects if configuration is needed
-- Runs interactive setup on first run or when environment variables are missing
-- Skips setup if environment is already configured
-- Use `--reconfigure` flag to force reconfiguration
+The main Armchair script that runs the dashboard:
 
 **What it does:**
-- Interactive configuration wizard (LLM provider, repositories, etc.)
-- Detects git roots automatically
-- Generates `armchair_env.sh` with your configuration
-- Pulls required Docker images
-- Starts the Armchair Dashboard with Splitter Agent
+- Prompts for workspace location (home directory or custom path)
+- Creates `.armchair_output` directory for analysis results
+- Reads LLM configuration from environment variables (if set)
+- Starts the Armchair Dashboard with Splitter Agent in Docker
+- Automatically opens the dashboard in your browser
 - Automatic localhost→host.docker.internal conversion for Mac/Windows
 
 **Common Usage:**
 ```bash
-# First time (will run setup then start)
-export ARMCHAIR_HOME=/path/to/workspace
+# Run with defaults
 ./scripts/armchair.sh
 
-# Subsequent runs (skip setup)
-source $ARMCHAIR_HOME/armchair_env.sh
+# Run with LLM configured
+export ARMCHAIR_MODEL_API_KEY="your-key"
+export ARMCHAIR_MODEL_API_BASE_URL="https://api.anthropic.com/v1"
+export ARMCHAIR_MODEL_NAME="claude-3-5-sonnet-20241022"
 ./scripts/armchair.sh
 
-# Force reconfiguration
-./scripts/armchair.sh --reconfigure
-
-# Custom options
-./scripts/armchair.sh --foreground --port-frontend 3000
+# Run in foreground mode with custom ports
+./scripts/armchair.sh --foreground --port-frontend 3000 --port-backend 3001
 ```
 
 **Available Options:**
-- `--api-key`, `--api-base-url`, `--model-name` - Override LLM settings
 - `--port-frontend`, `--port-backend` - Custom ports
-- `--foreground, -f` - Run in foreground mode
-- `--no-llm` - Disable LLM support
-- `--reconfigure` - Force reconfiguration
+- `--foreground, -f` - Run in foreground mode (shows logs)
+- `--name` - Custom container name
 - `--local` - Use local Docker image
+- `--image` - Use custom Docker image
 - `--help, -h` - Show help
 
 ## Advanced: Manual Docker Commands
 
-If you prefer to run Docker commands manually instead of using the provided scripts:
+If you prefer to run Docker commands manually instead of using the provided script:
 
-### Standalone Splitter Agent
+### Armchair Dashboard
 
-For running the splitter agent without the UI:
-
-```bash
-docker run --rm \
-  -v "your_git_root:/workspace1:ro" \
-  -v "$ARMCHAIR_OUTPUT:/output" \
-  -v "$(dirname $ARMCHAIR_SOURCE_YAML):/config:ro" \
-  -e OPENAI_API_KEY=your_key \
-  armchr/splitter:latest \
-  --repo your_repo_name \
-  --output-dir /output \
-  --source-config /config/source.yaml
-```
-
-### Armchair Dashboard (Splitter + Dashboard combined)
-
-**With LLM support (recommended):**
 ```bash
 docker run -d \
   --name armchair-dashboard \
   -p 8686:8686 -p 8787:8787 \
-  -v "$(dirname $ARMCHAIR_SOURCE_YAML):/app/config:ro" \
-  -v "$ARMCHAIR_OUTPUT:/app/output" \
-  -v "your_git_root:/workspace1" \
-  -e CONFIG_PATH=/app/config/source.yaml \
-  -e OUTPUT_PATH=/app/output \
+  -v "$HOME:/workspace:ro" \
+  -v "$HOME/.armchair_output:/app/output" \
   -e ARMCHAIR_MODEL_API_KEY=your_api_key \
   -e ARMCHAIR_MODEL_API_BASE_URL=https://api.anthropic.com/v1 \
   -e ARMCHAIR_MODEL_NAME=claude-3-5-sonnet-20241022 \
-  armchr/explainer:latest
+  --entrypoint /bin/bash \
+  armchr/explainer:latest \
+  -c "cd /app/backend && node server.js --output /app/output --root-map /workspace --root-dir $HOME & cd /app/frontend && serve -s dist -l 8686"
 ```
 
-**Without LLM support (view-only mode):**
-```bash
-docker run -d \
-  --name armchair-dashboard \
-  -p 8686:8686 -p 8787:8787 \
-  -v "$(dirname $ARMCHAIR_SOURCE_YAML):/app/config:ro" \
-  -v "$ARMCHAIR_OUTPUT:/app/output" \
-  -v "your_git_root:/workspace1" \
-  -e CONFIG_PATH=/app/config/source.yaml \
-  -e OUTPUT_PATH=/app/output \
-  armchr/explainer:latest
-```
+**Note:**
+- Replace `$HOME` with your actual home directory path if needed
+- LLM environment variables are optional - you can configure via the Settings UI instead
+- The container maps your home directory as read-only for security
 
 ## Troubleshooting
 
-### Environment Issues
-- Ensure `ARMCHAIR_HOME` is set and the directory exists
-- Source the environment file: `source $ARMCHAIR_HOME/armchair_env.sh`
-- Check that all required environment variables are set
+### Docker Permission Issues
+- **Docker Desktop asks for file access permission:** This is normal - Armchair needs to read your repositories
+- **Permission denied errors:** Make sure Docker has permission to access your chosen workspace directory
+- On macOS: Go to Docker Desktop Settings → Resources → File Sharing
 
 ### Docker Issues
-- Verify Docker is running: `docker info`
-- Check if images exist: `docker images | grep armchr`
-- Review container logs: `docker logs armchair-dashboard`
-- Stop and remove stale containers: `docker stop armchair-dashboard && docker rm armchair-dashboard`
+- **Container won't start:** Verify Docker is running with `docker info`
+- **Port already in use:** Stop other services on ports 8686/8787, or use custom ports with `--port-frontend` and `--port-backend`
+- **View logs:** `docker logs armchair-dashboard`
+- **Follow logs in real-time:** `docker logs -f armchair-dashboard`
+- **Clean restart:** `docker stop armchair-dashboard && docker rm armchair-dashboard`, then run `./scripts/armchair.sh` again
 
 ### Configuration Issues
-- Validate source.yaml syntax
-- Ensure repository paths are accessible
-- Check file permissions for mounted volumes
-- Verify API keys are correctly set in environment or command line
+- **Repository not showing up:** Add it via the Settings UI in the dashboard
+- **Can't access repositories:** Ensure the paths are under your chosen workspace directory
+- **LLM not working:** Configure via Settings UI or set environment variables before starting
 
 ### LLM Issues
-- Check API key is valid and not expired
-- Verify API base URL is correct for your provider
-- Ensure model name matches what your API provider supports
-- Review backend logs for API-related errors: `docker logs armchair-dashboard`
-- Test API connectivity: `curl -X GET http://localhost:8787/api/health`
+- **API errors:** Check API key is valid and not expired
+- **Wrong model name:** Verify model name matches your provider (e.g., `claude-3-5-sonnet-20241022` for Claude)
+- **Local LLM (Ollama) not working:** Use `http://localhost:11434/v1` or `http://host.docker.internal:11434/v1`
+- **Review errors:** Check backend logs with `docker logs armchair-dashboard`
