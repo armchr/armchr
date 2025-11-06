@@ -62,7 +62,7 @@ Click on the **Settings** icon (⚙️) in the dashboard to configure your AI mo
   - Ollama (local): `http://host.docker.internal:11434/v1`
 
 - **Model Name:** The specific model to use
-  - Claude: `claude-3-5-sonnet-20241022`, `claude-3-5-haiku-20241022`
+  - Claude: `claude-3-7-sonnet-20250219`
   - OpenAI: `gpt-4o`, `gpt-4o-mini`
   - Ollama: `qwen2.5-coder:32b`, `deepseek-coder-v2:16b`, `llama3.1:8b`
 
