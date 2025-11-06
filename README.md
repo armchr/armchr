@@ -12,11 +12,19 @@ The **Splitter Agent** breaks down commits (or uncommitted changes) into logical
 - Generate structured output for downstream analysis
 - Support multiple programming languages
 
+### 🔍 Reviewer Agent
+The **Reviewer Agent** provides AI-powered code review capabilities:
+- Analyzes commits and uncommitted changes for potential issues
+- Provides intelligent feedback on code quality and best practices
+- Supports multiple programming languages
+- Generates detailed review comments and suggestions
+
 ### 🌐 Armchair Dashboard
-The **Armchair Dashboard** provides simple access to all the ArmChair tools (only Splitter now):
+The **Armchair Dashboard** provides simple access to all the ArmChair tools:
 - Visualizes code analysis results from the Splitter Agent
+- Displays code reviews from the Reviewer Agent
 - Provides an interactive frontend for navigating code explanations
-- Enables running splitter analysis directly from the UI
+- Enables running splitter and reviewer analysis directly from the UI
 - Available at http://localhost:8686
 
 ## Quick Start
