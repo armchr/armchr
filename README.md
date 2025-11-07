@@ -1,8 +1,10 @@
 # Armchair
 
-Armchair is a set of tools to improve developer velocity while using AI coding agents like Claude Code, Github Copilot, Cursor etc.
+ArmChair is on a mission to bridge the gap between AI assisted coding and real developer productivity.
 
-Currently we are releasing v0 of our first two tools.
+It is a set of tools to improve developer velocity while using AI coding agents like Claude Code, Github Copilot, Cursor etc.
+
+Currently we are releasing v0 of our first two tools - Splitter and Reviewer embedding in an explainer dashboard.
 
 ## Tools
 
