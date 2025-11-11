@@ -218,6 +218,14 @@ echo "🔌 Backend API port: $PORT_BACKEND"
 echo "🐳 Docker image: $DOCKER_IMAGE"
 echo "📂 Workspace: $ARMCHAIR_HOME"
 echo "📂 Output directory: $ARMCHAIR_OUTPUT"
+echo ""
+
+# Pull the latest Docker image from registry (skip if using local image)
+if [[ "$DOCKER_IMAGE" != "explainer:latest" ]]; then
+    echo "📥 Pulling latest Docker image from registry..."
+    docker pull "$DOCKER_IMAGE"
+    echo ""
+fi
 
 # Build docker command
 if [ ! -z "$DETACHED" ]; then
@@ -243,7 +251,7 @@ DOCKER_CMD="$DOCKER_CMD -v \"$ARMCHAIR_OUTPUT:/app/output\""
 #fi
 
 DOCKER_CMD="$DOCKER_CMD --entrypoint /bin/bash $DOCKER_IMAGE"
-DOCKER_CMD="$DOCKER_CMD -c \"cd /app/backend && node server.js --output /app/output --root-map /workspace --root-dir $ARMCHAIR_HOME & cd /app/frontend && serve -s dist -l 8686\""
+DOCKER_CMD="$DOCKER_CMD -c \"cd /app/backend && node server.js --mcp --output /app/output --root-map /workspace --root-dir $ARMCHAIR_HOME & cd /app/frontend && serve -s dist -l 8686\""
 
 echo ""
 echo "🚀 Running Docker command:"
