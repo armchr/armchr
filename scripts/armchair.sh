@@ -89,53 +89,47 @@ done
 echo "📁 Workspace Configuration"
 echo "=========================="
 echo ""
-echo "Armchair will create a '.armchair_output' directory to store all output"
-echo "and temporary files. Choose where to create this directory:"
+echo "Armchair needs to know the root directory where your code repositories are located."
+echo "All repositories you want to analyze with Armchair must be under this directory."
 echo ""
-echo "1) Use home directory: $HOME/.armchair_output"
-echo "2) Specify custom path"
+echo "Examples:"
+echo "  • /Users/yourname/projects"
+echo "  • /Users/yourname/src"
+echo "  • $HOME (to access all repositories in your home directory)"
 echo ""
 
 while true; do
-    read -p "Enter your choice (1-2): " workspace_choice
+    read -p "Enter root directory path (or press Enter for $HOME): " root_dir
 
-    case $workspace_choice in
-        1)
-            ARMCHAIR_HOME="$HOME"
-            echo "✅ Using home directory: $ARMCHAIR_HOME"
-            break
-            ;;
-        2)
-            read -p "Enter custom workspace path: " custom_path
-            if [ -z "$custom_path" ]; then
-                echo "❌ Path cannot be empty"
-                continue
-            fi
-            # Expand tilde to home directory
-            custom_path="${custom_path/#\~/$HOME}"
+    # Default to HOME if empty
+    if [ -z "$root_dir" ]; then
+        root_dir="$HOME"
+    fi
 
-            if [ ! -d "$custom_path" ]; then
-                echo "⚠️  Directory does not exist: $custom_path"
-                read -p "Create it? (y/n): " create_dir
-                if [ "$create_dir" != "y" ] && [ "$create_dir" != "Y" ]; then
-                    continue
-                fi
-                mkdir -p "$custom_path"
-            fi
+    # Expand tilde to home directory
+    root_dir="${root_dir/#\~/$HOME}"
 
-            ARMCHAIR_HOME="$custom_path"
-            echo "✅ Using custom workspace: $ARMCHAIR_HOME"
-            break
-            ;;
-        *)
-            echo "❌ Invalid choice. Please enter 1 or 2."
-            ;;
-    esac
+    # Remove trailing slash if present
+    root_dir="${root_dir%/}"
+
+    if [ ! -d "$root_dir" ]; then
+        echo "❌ Directory does not exist: $root_dir"
+        read -p "Create it? (y/n): " create_dir
+        if [ "$create_dir" != "y" ] && [ "$create_dir" != "Y" ]; then
+            continue
+        fi
+        mkdir -p "$root_dir"
+    fi
+
+    ARMCHAIR_ROOT="$root_dir"
+    echo "✅ Root directory: $ARMCHAIR_ROOT"
+    break
 done
 
 echo ""
 
-ARMCHAIR_OUTPUT="$ARMCHAIR_HOME/.armchair_output"
+# Always create output in home directory
+ARMCHAIR_OUTPUT="$HOME/.armchair_output"
 
 # Create output directory if it doesn't exist
 if [ ! -d "$ARMCHAIR_OUTPUT" ]; then
@@ -216,7 +210,7 @@ fi
 echo "🌐 Frontend UI port: $PORT_FRONTEND"
 echo "🔌 Backend API port: $PORT_BACKEND"
 echo "🐳 Docker image: $DOCKER_IMAGE"
-echo "📂 Workspace: $ARMCHAIR_HOME"
+echo "📂 Root directory: $ARMCHAIR_ROOT"
 echo "📂 Output directory: $ARMCHAIR_OUTPUT"
 echo ""
 
@@ -236,7 +230,7 @@ fi
 
 DOCKER_CMD="$DOCKER_CMD -p $PORT_FRONTEND:8686"
 DOCKER_CMD="$DOCKER_CMD -p $PORT_BACKEND:8787"
-DOCKER_CMD="$DOCKER_CMD -v \"$ARMCHAIR_HOME:/workspace:ro\""
+DOCKER_CMD="$DOCKER_CMD -v \"$ARMCHAIR_ROOT:/workspace:ro\""
 DOCKER_CMD="$DOCKER_CMD -v \"$ARMCHAIR_OUTPUT:/app/output\""
 
 # Add LLM configuration if available
@@ -251,7 +245,7 @@ DOCKER_CMD="$DOCKER_CMD -v \"$ARMCHAIR_OUTPUT:/app/output\""
 #fi
 
 DOCKER_CMD="$DOCKER_CMD --entrypoint /bin/bash $DOCKER_IMAGE"
-DOCKER_CMD="$DOCKER_CMD -c \"cd /app/backend && node server.js --mcp --output /app/output --root-map /workspace --root-dir $ARMCHAIR_HOME & cd /app/frontend && serve -s dist -l 8686\""
+DOCKER_CMD="$DOCKER_CMD -c \"cd /app/backend && node server.js --mcp --output /app/output --root-map /workspace --root-dir $ARMCHAIR_ROOT & cd /app/frontend && serve -s dist -l 8686\""
 
 echo ""
 echo "🚀 Running Docker command:"
