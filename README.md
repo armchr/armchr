@@ -29,7 +29,7 @@ The **Armchair Dashboard** provides simple access to all the ArmChair tools:
 
 ## Quick Start
 
-The easiest way to run Armchair is using the Docker image. Follow these steps to get started:
+The easiest way to run Armchair is using the Docker image. You don't need to clone this repository - just download and run the setup script directly:
 
 ### Prerequisites
 
@@ -37,15 +37,18 @@ The easiest way to run Armchair is using the Docker image. Follow these steps to
 
 ### Run Armchair
 
-Simply run the Armchair script:
+Download and run the Armchair setup script:
 
 ```bash
-./scripts/armchair.sh
+curl -fsSL https://raw.githubusercontent.com/armchr/armchr/main/scripts/armchair.sh -o armchair.sh
+chmod +x armchair.sh
+./armchair.sh
 ```
 
 The script will:
-- Prompt you to choose a workspace location (your home directory or a custom path)
-- Create a `.armchair_output` directory to store analysis results and temporary files
+- Prompt you for the root directory where your code repositories are located
+- Create a `.armchair_output` directory in your home directory to store analysis results
+- Pull the latest Armchair Docker image
 - Start the Armchair Dashboard in Docker
 - Automatically open the dashboard in your browser at http://localhost:8686
 
