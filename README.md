@@ -1,43 +1,42 @@
 # Armchair
 
-ArmChair is on a mission to bridge the gap between AI assisted coding and real developer productivity.
+[![Docker](https://img.shields.io/badge/docker-armchr%2Fexplainer-blue)](https://hub.docker.com/r/armchr/explainer)
+[![License](https://img.shields.io/badge/license-MIT-green)](#license)
 
-Currently we are releasing v0 of our first two tools - Splitter and Reviewer embedded in an explainer dashboard.
+**AI-powered code analysis that helps developers understand and review changes faster.**
 
-## Tools
+Armchair bridges the gap between AI-assisted coding and real developer productivity by breaking down commits into logical chunks and providing intelligent code reviews—all through an interactive dashboard.
 
-### 🔄 Splitter Agent
-The **Splitter Agent** breaks down commits (or uncommitted changes) into logical chunks for easier analysis. It can:
-- Identify code structures and relationships
-- Generate structured output for downstream analysis
-- Support multiple programming languages
+---
 
-### 🔍 Reviewer Agent
-The **Reviewer Agent** provides AI-powered code review capabilities:
-- Analyzes commits and uncommitted changes for potential issues
-- Provides intelligent feedback on code quality and best practices
-- Supports multiple programming languages
-- Generates detailed review comments and suggestions
+## Table of Contents
 
-### 🌐 Armchair Dashboard
-The **Armchair Dashboard** provides simple access to all the ArmChair tools:
-- Visualizes code analysis results from the Splitter Agent
-- Displays code reviews from the Reviewer Agent
-- Provides an interactive frontend for navigating code explanations
-- Enables running splitter and reviewer analysis directly from the UI
-- Available at http://localhost:8686
+- [Quick Start](#quick-start)
+- [Features](#features)
+- [LLM Setup](#llm-setup)
+- [Performance Tips](#performance-tips)
+- [Configuration](#configuration)
+- [CLI Usage](#cli-usage)
+- [API Reference](#api-reference)
+- [Security Model](#security-model)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+- [License](#license)
+- [Changelog](#changelog)
+- [Advanced: Manual Docker](#advanced-manual-docker)
+
+---
 
 ## Quick Start
 
-The easiest way to run Armchair is using the Docker image. You don't need to clone this repository - just download and run the setup script directly:
+Get Armchair running in under 2 minutes.
 
 ### Prerequisites
 
-- Docker installed and running
+- **[Docker Desktop](https://www.docker.com/products/docker-desktop/)** (version 20.10+) installed and running
+- An LLM provider configured — see [LLM Setup](#llm-setup) for options
 
-### Run Armchair
-
-Download and run the Armchair setup script:
+### Install & Run
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/armchr/armchr/main/scripts/armchair.sh -o armchair.sh
@@ -46,281 +45,338 @@ chmod +x armchair.sh
 ```
 
 The script will:
-- Prompt you for the root directory where your code repositories are located
-- Create a `.armchair_output` directory in your home directory to store analysis results
-- Pull the latest Armchair Docker image
-- Start the Armchair Dashboard in Docker
-- Automatically open the dashboard in your browser at http://localhost:8686
+1. Prompt for your code repositories root directory
+2. Pull the latest Docker image
+3. Start the dashboard at **http://localhost:8686**
+4. Open your browser automatically for further setup
 
-**Privacy Notice:**
-Docker Desktop may ask for permission to access your files. This is required because:
-- Armchair needs to read repositories you explicitly configure in the UI
-- Only specific code files you select are sent to your configured LLM
-- No files are sent to Armchair servers - all processing is local
+### First-Time Setup
 
-### Using the Dashboard
+1. Click the **Settings** icon (⚙️) in the dashboard
+2. Configure your LLM:
+   | Provider | API Base URL | Model |
+   |----------|--------------|-------|
+   | Claude | `https://api.anthropic.com/v1` | `claude-sonnet-4-20250514` |
+   | OpenAI | `https://api.openai.com/v1` | `gpt-4o` |
+   | Ollama | `http://host.docker.internal:11434/v1` | `qwen3:32b` |
 
-Once the dashboard opens in your browser (http://localhost:8686), you need to configure it:
+   See [LLM Setup](#llm-setup) for detailed instructions on getting API keys or installing local models.
+3. Add your repositories (paths must be under your workspace directory)
+4. Start analyzing commits
 
-#### 1. Configure LLM Settings
-Click on the **Settings** icon (⚙️) in the dashboard to configure your AI model:
+---
 
-![LLM Settings](images/llm-settings.png)
+## Features
 
-- **API Base URL:** The endpoint for your LLM service
-  - Claude (Anthropic): `https://api.anthropic.com/v1`
-  - OpenAI: `https://api.openai.com/v1`
-  - Ollama (local): `http://host.docker.internal:11434/v1`
+### Splitter Agent
+Breaks down commits into logical, reviewable chunks:
+- Identifies code structures and relationships
+- Generates structured output for downstream analysis
+- Supports multiple programming languages
 
-- **Model Name:** The specific model to use
-  - Claude: `claude-3-7-sonnet-20250219`
-  - OpenAI: `gpt-4o`, `gpt-4o-mini`
-  - Ollama: `qwen2.5-coder:32b`, `deepseek-coder-v2:16b`, `llama3.1:8b`
+### Reviewer Agent
+AI-powered code review:
+- Analyzes commits and uncommitted changes
+- Provides feedback on code quality and best practices
+- Generates detailed suggestions
 
-- **API Key:** Your API key (not required for Ollama)
+### Dashboard
+Interactive web UI at http://localhost:8686:
+- Browse branches, commits, and uncommitted changes
+- Run splitter and reviewer analysis
+- Visualize annotated code explanations
 
-**Note for Local LLM (Ollama):** Use `http://host.docker.internal:11434/v1` instead of `http://localhost:11434/v1` to allow the Docker container to access your local Ollama service.
+**Backend API** available at http://localhost:8787 for programmatic access.
 
-#### 2. Configure Repositories
-In the same Settings dialog, add repositories you want to analyze:
-- Click "Add Repository"
-- Enter repository name and path
-- The path must be under your chosen workspace directory
+---
 
-#### 3. Start Using Armchair
-After configuration:
-- **Browse Code:** Navigate branches, commits, and uncommitted changes
-- **Run Analysis:** Use the splitter agent to break down commits into logical chunks
-- **Explore Results:** View the separate patches and annotated changes
+## LLM Setup
 
-**Backend API:** Available at http://localhost:8787 for programmatic access
+Armchair requires an LLM to power its analysis. You can use proprietary cloud APIs or run open models locally.
 
-**Performance Tip for Large Repositories:**
+### Proprietary LLMs (Cloud APIs)
 
-For very large repositories, the dashboard can be slow when loading unstaged/untracked files. You can improve performance by adding `commitOnly: true` to specific repositories in your configuration via the Settings UI or by editing `~/.armchair_output/.armchair/source.yaml`:
+#### Anthropic (Claude)
 
+Claude models excel at code understanding and review tasks.
+
+| Setting | Value |
+|---------|-------|
+| **API Base URL** | `https://api.anthropic.com/v1` |
+| **Recommended Model** | `claude-sonnet-4-20250514` |
+
+**Get an API key:**
+1. Create an account at [console.anthropic.com](https://console.anthropic.com/)
+2. Navigate to [API Keys](https://console.anthropic.com/settings/keys)
+3. Click "Create Key" and copy it to your Armchair settings
+
+#### OpenAI
+
+| Setting | Value |
+|---------|-------|
+| **API Base URL** | `https://api.openai.com/v1` |
+| **Recommended Model** | `gpt-4o` |
+
+**Get an API key:**
+1. Create an account at [platform.openai.com](https://platform.openai.com/)
+2. Navigate to [API Keys](https://platform.openai.com/api-keys)
+3. Click "Create new secret key" and copy it to your Armchair settings
+
+### Local LLMs with Ollama
+
+Run models locally for privacy and no API costs. [Ollama](https://ollama.com/) makes it easy to run open-source models.
+
+#### Install Ollama
+
+1. Download from [ollama.com/download](https://ollama.com/download)
+2. Install and start Ollama
+3. Verify installation: `ollama --version`
+
+#### Install a Coding Model
+
+We recommend **Qwen3 Coder** for code analysis:
+
+```bash
+# Install Qwen3 Coder (recommended for code tasks)
+ollama pull qwen3:32b
+
+# Or for smaller systems
+ollama pull qwen3:14b
+```
+
+#### Other Recommended Models
+
+| Model | Command | Best For |
+|-------|---------|----------|
+| **Qwen3** | `ollama pull qwen3:32b` | Code analysis, general reasoning |
+| **DeepSeek Coder V2** | `ollama pull deepseek-coder-v2:16b` | Code-specific tasks |
+| **DeepSeek R1** | `ollama pull deepseek-r1:32b` | Complex reasoning, detailed analysis |
+| **Llama 3.1** | `ollama pull llama3.1:70b` | General purpose, well-rounded |
+| **Llama 3.1 (smaller)** | `ollama pull llama3.1:8b` | Faster, lower resource usage |
+
+#### Configure Armchair for Ollama
+
+In the Armchair Settings UI:
+
+| Setting | Value |
+|---------|-------|
+| **API Base URL** | `http://host.docker.internal:11434/v1` |
+| **Model Name** | `qwen3:32b` (or your installed model) |
+| **API Key** | Leave empty |
+
+**Important:** Use `host.docker.internal` instead of `localhost` so the Docker container can reach your local Ollama instance.
+
+---
+
+## Performance Tips
+
+For large repositories, enable `commitOnly` mode to skip loading unstaged/untracked files:
+
+**Via Settings UI:** Toggle "Commit Only" when adding a repository
+
+**Via config file** (`~/.armchair_output/.armchair/source.yaml`):
 ```yaml
 source:
   repositories:
     - name: "large-repo"
-      path: "/Users/yourname/projects/large-repo"
-      commitOnly: true  # Skip unstaged/untracked files for better performance
-    - name: "normal-repo"
-      path: "/Users/yourname/projects/normal-repo"
-      # commitOnly defaults to false
+      path: "/path/to/large-repo"
+      commitOnly: true  # Faster loading, commits still available
 ```
 
-When `commitOnly: true` is set:
-- All commits and branches remain available for exploration and analysis
-- Unstaged and untracked files are not loaded in the dashboard
-- Dashboard loads significantly faster for very large repositories
-- You can still analyze specific commits via the UI or API
+When enabled:
+- All commits and branches remain available
+- Dashboard loads significantly faster
+- Unstaged/untracked files are hidden
 
+---
 
-### Advanced Options
+## Configuration
+
+All settings are managed through the dashboard Settings UI (⚙️) or config files.
+
+### Config Files
+
+| File | Purpose |
+|------|---------|
+| `~/.armchair_output/.armchair/.armchair.json` | LLM settings (API URL, model, key) |
+| `~/.armchair_output/.armchair/source.yaml` | Repository configuration |
+
+### Output Structure
+```
+~/.armchair_output/
+├── .armchair/
+│   ├── source.yaml         # Repository config
+│   └── .armchair.json      # LLM settings
+├── commit_*/               # Split patches
+└── reviews/                # Code reviews
+```
+
+### Script Options
 
 ```bash
-# Run in foreground mode (see logs in terminal)
-./scripts/armchair.sh --foreground
+./armchair.sh [OPTIONS]
 
-# Use custom ports
-./scripts/armchair.sh --port-frontend 3000 --port-backend 3001
-
-# Use local Docker image (for development)
-./scripts/armchair.sh --local
-
-# Use custom Docker image
-./scripts/armchair.sh --image my-custom-image:tag
-
-# Show help
-./scripts/armchair.sh --help
+Options:
+  --port-frontend PORT    Frontend port (default: 8686)
+  --port-backend PORT     Backend port (default: 8787)
+  --foreground, -f        Run in foreground (show logs)
+  --name NAME             Container name (default: armchair-dashboard)
+  --local                 Use local image 'explainer:latest'
+  --image IMAGE           Use custom Docker image
+  --help, -h              Show help
 ```
 
-**Available Options:**
-- `--port-frontend PORT` - Frontend UI port (default: 8686)
-- `--port-backend PORT` - Backend API port (default: 8787)
-- `--foreground, -f` - Run in foreground mode (shows logs in terminal)
-- `--name NAME` - Custom container name (default: armchair-dashboard)
-- `--local` - Use local image 'explainer:latest'
-- `--image IMAGE` - Use custom Docker image
-- `--help, -h` - Show full help message
+---
 
-### Management Commands
+## CLI Usage
+
+Run the Splitter Agent standalone (without the dashboard) for CI/CD or automation:
 
 ```bash
-# View logs
-docker logs armchair-dashboard
-
-# Follow logs in real-time
-docker logs -f armchair-dashboard
-
-# Stop dashboard
-docker stop armchair-dashboard
-
-# Start stopped dashboard
-docker start armchair-dashboard
-
-# Remove container
-docker rm armchair-dashboard
+./scripts/run_splitter.sh --repo REPO_NAME --api-key YOUR_API_KEY
 ```
 
-### 4. Trigger Analysis via API
+### Options
 
-Once the dashboard is running, you can trigger splitter analysis from the UI for any commit or uncommitted changes.
-If you need direct access to the splitter agent programmatically, trigger it via the backend API:
+| Flag | Description |
+|------|-------------|
+| `--repo NAME` | Repository name from config (required) |
+| `--api-key KEY` | API key (or set `OPENAI_API_KEY` env var) |
+| `--commit HASH` | Analyze specific commit |
+| `--patch` | Analyze uncommitted changes |
+| `--mcp-config FILE` | [MCP](https://modelcontextprotocol.io/) server configuration file |
+| `--verbose` | Enable verbose output |
+| `--interactive, -it` | Interactive mode |
+
+**Note:** The `--mcp-config` flag enables integration with Model Context Protocol servers, allowing the splitter to use additional tools and context sources during analysis.
+
+---
+
+## API Reference
+
+### Trigger Analysis
 
 ```bash
 # Split a specific commit
 curl -X POST http://localhost:8787/api/split \
   -H "Content-Type: application/json" \
-  -d '{
-    "repoName": "my-repo",
-    "branch": "main",
-    "commitId": "abc1234"
-  }'
+  -d '{"repoName": "my-repo", "branch": "main", "commitId": "abc1234"}'
 
-# Split uncommitted changes (working directory)
+# Split uncommitted changes
 curl -X POST http://localhost:8787/api/split \
   -H "Content-Type: application/json" \
-  -d '{
-    "repoName": "my-repo",
-    "branch": "main"
-  }'
-
+  -d '{"repoName": "my-repo", "branch": "main"}'
 ```
 
-**Parameters:**
-- `repoName` (required) - Repository name from your source config
-- `branch` (required) - Target branch to analyze
-- `commitId` (optional) - Specific commit hash to analyze. If omitted, analyzes uncommitted changes
-
-**Other useful API endpoints:**
+### Other Endpoints
 
 ```bash
-# List all repositories and their branches
+# List repositories and branches
 curl http://localhost:8787/api/repositories
 
-# List all analyzed commits
+# List analyzed commits
 curl http://localhost:8787/api/commits
 
-# Get diff for a specific commit
+# Get commit diff
 curl http://localhost:8787/api/repositories/my-repo/commits/abc1234/diff
 
-# Get uncommitted changes diff
+# Get uncommitted changes
 curl http://localhost:8787/api/repositories/my-repo/branches/main/working-directory/diff
 ```
 
-## Configuration
+---
 
-All configuration is done through the Settings UI in the dashboard (⚙️ icon).
+## Security Model
 
-### LLM Configuration
-Configure your AI model settings:
-- **API Base URL:** Endpoint for your LLM service
-- **Model Name:** The specific model to use
-- **API Key:** Your API key (if required)
+Armchair is designed with security in mind:
 
-Settings are stored in `~/.armchair_output/.armchair/.armchair.json`.
+| Aspect | Implementation |
+|--------|----------------|
+| **File Access** | Your home directory is mounted **read-only** (`-v "$HOME:/workspace:ro"`) |
+| **Data Locality** | All processing happens locally—no data sent to Armchair servers |
+| **LLM Communication** | Only files you explicitly select are sent to your configured LLM |
+| **Output Isolation** | Results stored in `~/.armchair_output`, separate from your code |
 
-### Repository Configuration
-Add repositories you want to analyze:
-- Click "Add Repository" in the Settings dialog
-- Provide repository name and full path
-- Paths must be under your chosen workspace directory
+**What gets sent to the LLM:**
+- Code diffs you choose to analyze
+- File contents within those diffs
 
-Configuration is stored in `~/.armchair_output/.armchair/source.yaml`.
+**What stays local:**
+- Repository metadata
+- Git history
+- All files not explicitly analyzed
 
-### Output Directory Structure
-```
-~/.armchair_output/
-  .armchair/
-    source.yaml         # Repository configuration
-    .armchair.json      # LLM settings
-  commit_*/             # Split patches from analysis
-  reviews/              # Code reviews
-```
+---
 
-## Running Splitter Agent as Command-Line Tool
+## Troubleshooting
 
-If you prefer to run the Splitter Agent as a standalone command-line tool (without the UI), you can use the `run_splitter.sh` script. This is useful for:
-- CI/CD pipelines
-- Batch processing multiple repositories
-- Automated analysis workflows
-- Integration with other tools
+### Docker Issues
 
-### Usage
+| Problem | Solution |
+|---------|----------|
+| Container won't start | Verify Docker is running: `docker info` |
+| Port in use | Use `--port-frontend 3000 --port-backend 3001` |
+| Permission denied | Add workspace to Docker Desktop → Settings → Resources → File Sharing |
 
 ```bash
-# Run the splitter for a specific repository
-./scripts/run_splitter.sh --repo REPO_NAME --api-key YOUR_API_KEY
+# View logs
+docker logs armchair-dashboard
 
-# Example with verbose output
-./scripts/run_splitter.sh --repo my-repo --api-key sk-... --verbose
+# Follow logs
+docker logs -f armchair-dashboard
 
-# Run for a specific commit
-./scripts/run_splitter.sh --repo my-repo --api-key sk-... --commit abc123
-
-# Run in interactive mode
-./scripts/run_splitter.sh --repo my-repo --api-key sk-... --interactive
-
-# Use MCP configuration
-./scripts/run_splitter.sh --repo my-repo --api-key sk-... --mcp-config /path/to/mcp.json
+# Clean restart
+docker stop armchair-dashboard && docker rm armchair-dashboard
+./armchair.sh
 ```
 
-### Available Options
+### LLM Issues
 
-- `--repo REPO_NAME` - Repository name from source config (required)
-- `--api-key API_KEY` - API key (or set OPENAI_API_KEY env var)
-- `--mcp-config FILE` - MCP configuration file path
-- `--commit COMMIT_HASH` - Specific commit to analyze
-- `--patch` - Analyze uncommitted changes
-- `--verbose` - Enable verbose output
-- `--interactive, -it` - Run in interactive mode
-- `--help, -h` - Show help message
+| Problem | Solution |
+|---------|----------|
+| API errors | Verify API key is valid |
+| Model not found | Check model name matches provider exactly |
+| Ollama not connecting | Use `http://host.docker.internal:11434/v1` (not localhost) |
 
-**Note:** You can set `OPENAI_API_KEY` as an environment variable instead of using `--api-key`.
+### Configuration Issues
 
-### Output
+| Problem | Solution |
+|---------|----------|
+| Repository not showing | Add via Settings UI (⚙️) |
+| Can't access repo | Ensure path is under your workspace directory |
 
-The splitter generates structured analysis output in `$ARMCHAIR_OUTPUT`, which can be:
-- Viewed using the Armchair Dashboard
-- Processed by other tools
-- Committed to version control for historical tracking
+---
 
-## Scripts
+## Contributing
 
-### `scripts/armchair.sh`
-The main Armchair script that runs the dashboard:
+We welcome contributions! Please:
 
-**What it does:**
-- Prompts for workspace location (home directory or custom path)
-- Creates `.armchair_output` directory for analysis results
-- Starts the Armchair Dashboard with Splitter Agent in Docker
-- Automatically opens the dashboard in your browser
-- All LLM and repository configuration is done through the dashboard UI
+1. Open an issue to discuss proposed changes
+2. Fork the repository
+3. Create a feature branch
+4. Submit a pull request
 
-**Common Usage:**
-```bash
-# Run with defaults
-./scripts/armchair.sh
+Report bugs and request features via [GitHub Issues](https://github.com/armchr/armchr/issues).
 
-# Run in foreground mode with custom ports
-./scripts/armchair.sh --foreground --port-frontend 3000 --port-backend 3001
-```
+---
 
-**Available Options:**
-- `--port-frontend`, `--port-backend` - Custom ports
-- `--foreground, -f` - Run in foreground mode (shows logs)
-- `--name` - Custom container name
-- `--local` - Use local Docker image
-- `--image` - Use custom Docker image
-- `--help, -h` - Show help
+## License
 
-## Advanced: Manual Docker Commands
+MIT License. See [LICENSE](LICENSE) for details.
 
-If you prefer to run Docker commands manually instead of using the provided script:
+---
 
-### Armchair Dashboard
+## Changelog
+
+See [Releases](https://github.com/armchr/armchr/releases) for version history.
+
+**Current Version:** v0 (Preview)
+
+---
+
+## Advanced: Manual Docker
+
+For manual Docker control without the script:
 
 ```bash
 docker run -d \
@@ -333,32 +389,12 @@ docker run -d \
   -c "cd /app/backend && node server.js --output /app/output --root-map /workspace --root-dir $HOME & cd /app/frontend && serve -s dist -l 8686"
 ```
 
-**Note:**
-- Replace `$HOME` with your actual home directory path if needed
-- Configure LLM and repositories through the Settings UI in the dashboard
-- The container maps your home directory as read-only for security
+### Management Commands
 
-## Troubleshooting
-
-### Docker Permission Issues
-- **Docker Desktop asks for file access permission:** This is normal - Armchair needs to read your repositories
-- **Permission denied errors:** Make sure Docker has permission to access your chosen workspace directory
-- On macOS: Go to Docker Desktop Settings → Resources → File Sharing
-
-### Docker Issues
-- **Container won't start:** Verify Docker is running with `docker info`
-- **Port already in use:** Stop other services on ports 8686/8787, or use custom ports with `--port-frontend` and `--port-backend`
-- **View logs:** `docker logs armchair-dashboard`
-- **Follow logs in real-time:** `docker logs -f armchair-dashboard`
-- **Clean restart:** `docker stop armchair-dashboard && docker rm armchair-dashboard`, then run `./scripts/armchair.sh` again
-
-### Configuration Issues
-- **Repository not showing up:** Add it via the Settings UI (⚙️ icon) in the dashboard
-- **Can't access repositories:** Ensure the paths are under your chosen workspace directory
-- **LLM not working:** Configure via Settings UI in the dashboard
-
-### LLM Issues
-- **API errors:** Check API key is valid and not expired
-- **Wrong model name:** Verify model name matches your provider (e.g., `claude-3-5-sonnet-20241022` for Claude)
-- **Local LLM (Ollama) not working:** Use `http://localhost:11434/v1` or `http://host.docker.internal:11434/v1`
-- **Review errors:** Check backend logs with `docker logs armchair-dashboard`
+```bash
+docker logs armchair-dashboard      # View logs
+docker logs -f armchair-dashboard   # Follow logs
+docker stop armchair-dashboard      # Stop
+docker start armchair-dashboard     # Start
+docker rm armchair-dashboard        # Remove
+```
