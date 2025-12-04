@@ -34,17 +34,26 @@ class SemanticGrouper:
             for change_id in group.change_ids:
                 atomic_membership[change_id] = group.id
 
-        # 1. Group by file proximity
+        # 1. Group by sub-package (directory structure)
+        # This is the most important grouping for new feature additions
+        subpackage_groups = self._group_by_subpackage(changes, atomic_membership)
+        semantic_groups.extend(subpackage_groups)
+
+        # 2. Group by file proximity
         file_groups = self._group_by_file(changes, atomic_membership)
         semantic_groups.extend(file_groups)
 
-        # 2. Identify refactoring patterns
+        # 3. Identify refactoring patterns
         refactoring_groups = self._identify_refactoring_patterns(changes, atomic_membership)
         semantic_groups.extend(refactoring_groups)
 
-        # 3. Group by symbol similarity
+        # 4. Group by symbol similarity
         symbol_groups = self._group_by_symbols(changes, atomic_membership)
         semantic_groups.extend(symbol_groups)
+
+        # 5. Group by file type (interfaces/models vs implementations)
+        file_type_groups = self._group_by_file_type(changes, atomic_membership)
+        semantic_groups.extend(file_type_groups)
 
         # Remove duplicate groupings
         semantic_groups = self._deduplicate_groups(semantic_groups)
@@ -76,6 +85,144 @@ class SemanticGrouper:
                     cohesion_score=cohesion
                 )
                 groups.append(group)
+
+        return groups
+
+    def _group_by_subpackage(
+        self,
+        changes: List[Change],
+        atomic_membership: Dict[str, str]
+    ) -> List[SemanticGroup]:
+        """Group changes by their immediate parent directory (sub-package).
+
+        This creates natural boundaries based on code organization,
+        which is especially useful for splitting large new feature additions.
+        """
+        subpackage_map = defaultdict(list)
+
+        for change in changes:
+            file_path = change.file
+            parts = file_path.split('/')
+
+            if len(parts) >= 2:
+                # Use parent directory as sub-package
+                subpackage = '/'.join(parts[:-1])
+            else:
+                subpackage = 'root'
+
+            subpackage_map[subpackage].append(change.id)
+
+        groups = []
+        for idx, (subpackage, change_ids) in enumerate(subpackage_map.items()):
+            if len(change_ids) >= 1:  # Include even single-file sub-packages
+                # Calculate cohesion - same sub-package = high cohesion
+                cohesion = 0.85 if len(change_ids) > 1 else 0.7
+
+                # Get the leaf directory name for a cleaner name
+                subpkg_name = subpackage.split('/')[-1] if '/' in subpackage else subpackage
+
+                group = SemanticGroup(
+                    id=f"subpkg_{idx}",
+                    name=f"Package: {subpkg_name}",
+                    change_ids=change_ids,
+                    description=f"Changes in sub-package: {subpackage}",
+                    cohesion_score=cohesion
+                )
+                groups.append(group)
+
+        return groups
+
+    def _group_by_file_type(
+        self,
+        changes: List[Change],
+        atomic_membership: Dict[str, str]
+    ) -> List[SemanticGroup]:
+        """Group changes by file type (interfaces/models vs implementations).
+
+        This helps split large features into logical layers:
+        1. Interfaces, types, and models (define contracts first)
+        2. Utility functions
+        3. Core implementations
+        4. Controllers/handlers (integration layer)
+        """
+        # Patterns for different file types
+        interface_patterns = [
+            '/model/', '/models/', '/types/', '/interfaces/', '/dto/',
+            'interface.go', 'types.go', 'model.go', 'models.go',
+            '_interface.py', '_types.py', '_model.py', '_models.py',
+            '.d.ts', 'types.ts', 'interfaces.ts',
+        ]
+
+        util_patterns = [
+            '/utils/', '/util/', '/helpers/', '/helper/', '/common/',
+            '_utils.py', '_util.py', '_helper.py', '_helpers.py',
+            'utils.go', 'util.go', 'helpers.go', 'helper.go',
+            'utils.ts', 'util.ts', 'helpers.ts', 'helper.ts',
+        ]
+
+        controller_patterns = [
+            '/controller/', '/controllers/', '/handler/', '/handlers/',
+            '/api/', '/routes/', '/endpoints/',
+            '_controller.py', '_handler.py', '_api.py',
+            'controller.go', 'handler.go',
+            '.controller.ts', '.handler.ts',
+        ]
+
+        # Classify changes
+        interfaces = []
+        utils = []
+        controllers = []
+        implementations = []
+
+        for change in changes:
+            file_path = change.file.lower()
+
+            if any(pattern in file_path for pattern in interface_patterns):
+                interfaces.append(change.id)
+            elif any(pattern in file_path for pattern in util_patterns):
+                utils.append(change.id)
+            elif any(pattern in file_path for pattern in controller_patterns):
+                controllers.append(change.id)
+            else:
+                implementations.append(change.id)
+
+        groups = []
+
+        if interfaces:
+            groups.append(SemanticGroup(
+                id="filetype_interfaces",
+                name="Interfaces and Models",
+                change_ids=interfaces,
+                description="Interface definitions, types, and data models",
+                cohesion_score=0.9
+            ))
+
+        if utils:
+            groups.append(SemanticGroup(
+                id="filetype_utils",
+                name="Utilities",
+                change_ids=utils,
+                description="Utility functions and helpers",
+                cohesion_score=0.85
+            ))
+
+        if controllers:
+            groups.append(SemanticGroup(
+                id="filetype_controllers",
+                name="Controllers",
+                change_ids=controllers,
+                description="Controllers, handlers, and API endpoints",
+                cohesion_score=0.8
+            ))
+
+        if implementations:
+            groups.append(SemanticGroup(
+                id="filetype_impl",
+                name="Implementations",
+                change_ids=implementations,
+                description="Core implementation files",
+                cohesion_score=0.75
+            ))
 
         return groups
 

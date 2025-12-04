@@ -1,8 +1,50 @@
 """LLM client using OpenAI-compatible API."""
 
 import json
+import re
 from typing import List, Dict, Optional, Any
 from openai import OpenAI
+
+
+MAX_CHANGES_FOR_FULL_CONTEXT = 5
+
+
+def extract_json_from_response(response: str) -> Dict[str, Any]:
+    """Extract JSON from LLM response, handling markdown code blocks.
+
+    Args:
+        response: Raw LLM response text
+
+    Returns:
+        Parsed JSON dictionary
+
+    Raises:
+        json.JSONDecodeError: If no valid JSON found
+    """
+    # Try parsing as-is first
+    try:
+        return json.loads(response)
+    except json.JSONDecodeError:
+        pass
+
+    # Try extracting from markdown code block
+    json_match = re.search(r'```(?:json)?\s*\n(.*?)\n```', response, re.DOTALL)
+    if json_match:
+        try:
+            return json.loads(json_match.group(1))
+        except json.JSONDecodeError:
+            pass
+
+    # Try finding JSON object anywhere in text
+    json_match = re.search(r'\{.*\}', response, re.DOTALL)
+    if json_match:
+        try:
+            return json.loads(json_match.group(0))
+        except json.JSONDecodeError:
+            pass
+
+    # If all else fails, raise error
+    raise json.JSONDecodeError(f"No valid JSON found in response", response, 0)
 
 
 class LLMClient:
@@ -64,7 +106,8 @@ class LLMClient:
     def analyze_dependencies(
         self,
         changes_summary: str,
-        dependency_list: str
+        dependency_list: str,
+        changes: List[Any] = []
     ) -> Dict[str, Any]:
         """Use LLM to analyze dependencies between changes.
 
@@ -75,10 +118,32 @@ class LLMClient:
         Returns:
             Dictionary with analysis results
         """
-        prompt = f"""Analyze the following code changes and their dependencies.
 
-# Changes:
+        # Prepare changes details section
+        changes_details = ""
+        if changes and len(changes) > 0:
+            if len(changes) > MAX_CHANGES_FOR_FULL_CONTEXT:
+                # do not send full changes if too many
+                changes_details = "(Changes details omitted - too many changes)"
+            else:
+                # Include full change details for better analysis
+                try:
+                    changes_details = json.dumps([change.__dict__ for change in changes], indent=2)
+                except (AttributeError, TypeError) as e:
+                    print(f"  Warning: Failed to serialize changes for LLM analysis: {e}")
+                    changes_details = ""
+            
+            changes_details = f"# Change Details:\n{changes_details}\n"
+        else:
+            changes_details = ""
+
+        prompt = f"""Analyze the following code changes and their dependencies. DO NOT consider same hunk as dependent.
+
+# Change Summaries:
 {changes_summary}
+
+
+{changes_details}
 
 # Detected Dependencies:
 {dependency_list}
@@ -114,14 +179,17 @@ Respond in JSON format:
         )
 
         try:
-            return json.loads(response)
-        except json.JSONDecodeError:
+            return extract_json_from_response(response)
+        except json.JSONDecodeError as e:
+            print(f"  [LLM] JSON parse error: {e}")
+            print(f"  [LLM] Raw response: {response[:500]}...")  # First 500 chars
             return {"error": "Failed to parse LLM response", "raw_response": response}
 
     def identify_semantic_groups(
         self,
         changes_summary: str,
-        dependencies: str
+        dependencies: str,
+        changes: List[Any] = []
     ) -> Dict[str, Any]:
         """Use LLM to identify semantic groups.
 
@@ -132,10 +200,32 @@ Respond in JSON format:
         Returns:
             Dictionary with semantic groups
         """
-        prompt = f"""Given these code changes and dependencies, identify semantic groups that represent coherent units of work.
+        # Prepare changes details section
+        changes_details = ""
+        if changes and len(changes) > 0:
+            if len(changes) > MAX_CHANGES_FOR_FULL_CONTEXT:
+                # do not send full changes if too many
+                changes_details = "(Changes details omitted - too many changes)"
+            else:
+                # Include full change details for better analysis
+                try:
+                    changes_details = json.dumps([change.__dict__ for change in changes], indent=2)
+                except (AttributeError, TypeError) as e:
+                    print(f"  Warning: Failed to serialize changes for LLM analysis: {e}")
+                    changes_details = ""
+            
+            changes_details = f"# Change Details:\n{changes_details}\n"
+        else:
+            changes_details = ""
+
+        prompt = f"""Given these code changes and dependencies, identify semantic groups that represent coherent units of work. 
+Before grouping, consider what the change is actually doing. It may be that some changes are related even if no direct dependency is detected.
+Similarly, some changes with dependencies may not belong in the same semantic group if they serve different purposes. 
 
 # Changes:
 {changes_summary}
+
+{changes_details}
 
 # Dependencies:
 {dependencies}
@@ -166,13 +256,15 @@ Respond in JSON format:
 
         response = self.chat_completion(
             messages=messages,
-            temperature=0.5,
+            temperature=0.3,
             response_format={"type": "json_object"}
         )
 
         try:
-            return json.loads(response)
-        except json.JSONDecodeError:
+            return extract_json_from_response(response)
+        except json.JSONDecodeError as e:
+            print(f"  [LLM] JSON parse error: {e}")
+            print(f"  [LLM] Raw response: {response[:500]}...")  # First 500 chars
             return {"error": "Failed to parse LLM response", "raw_response": response}
 
     def propose_patch_split(
@@ -255,7 +347,7 @@ Respond in JSON format:
         )
 
         try:
-            return json.loads(response)
+            return extract_json_from_response(response)
         except json.JSONDecodeError:
             return {"error": "Failed to parse LLM response", "raw_response": response}
 
@@ -308,6 +400,6 @@ Respond in JSON format:
         )
 
         try:
-            return json.loads(response)
+            return extract_json_from_response(response)
         except json.JSONDecodeError:
             return {"error": "Failed to parse LLM response", "raw_response": response}

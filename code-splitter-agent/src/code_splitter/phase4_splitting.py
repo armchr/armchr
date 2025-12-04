@@ -5,6 +5,31 @@ from .models import Change, Dependency, Patch, AtomicGroup, SemanticGroup
 from .phase2_graph import DependencyGraph
 
 
+# File patterns for different layers (used in interface-first splitting)
+INTERFACE_PATTERNS = [
+    '/model/', '/models/', '/types/', '/interfaces/', '/dto/',
+    'interface.go', 'types.go', 'model.go', 'models.go',
+    '_interface.py', '_types.py', '_model.py', '_models.py',
+    '.d.ts', 'types.ts', 'interfaces.ts',
+    'result.go', 'result.py',  # Result types often come first
+]
+
+UTIL_PATTERNS = [
+    '/utils/', '/util/', '/helpers/', '/helper/', '/common/',
+    '_utils.py', '_util.py', '_helper.py', '_helpers.py',
+    'utils.go', 'util.go', 'helpers.go', 'helper.go',
+    'utils.ts', 'util.ts', 'helpers.ts', 'helper.ts',
+]
+
+CONTROLLER_PATTERNS = [
+    '/controller/', '/controllers/', '/handler/', '/handlers/',
+    '/api/', '/routes/', '/endpoints/',
+    '_controller.py', '_handler.py', '_api.py',
+    'controller.go', 'handler.go',
+    '.controller.ts', '.handler.ts',
+]
+
+
 class PatchSplitter:
     """Splits changes into patches while respecting dependencies."""
 
@@ -43,10 +68,19 @@ class PatchSplitter:
         atomic_membership = self._build_atomic_membership(atomic_groups)
         print(f"  [Phase 4] Built change map and atomic membership")
 
+        # Check if this is primarily a new feature (mostly additions)
+        new_file_changes = [c for c in changes if c.type == 'add']
+        is_new_feature = len(new_file_changes) > len(changes) * 0.7
+
+        if is_new_feature:
+            print(f"  [Phase 4] Detected new feature addition ({len(new_file_changes)}/{len(changes)} are additions)")
+            print(f"  [Phase 4] Using interface-first splitting strategy")
+
         # Start with atomic groups as building blocks
         patch_candidates = []
 
         # Add atomic groups as initial patches
+        # For new features, try to split large atomic groups using interface-first strategy
         print(f"  [Phase 4] Creating patch candidates from atomic groups...")
         for idx, group in enumerate(atomic_groups):
             print(f"  [Phase 4]   Processing atomic group {idx+1}/{len(atomic_groups)}")
@@ -67,6 +101,15 @@ class PatchSplitter:
             )
             print(f"  [Phase 4]   Atomic group {idx+1}: {len(group.change_ids)} changes, {size} lines")
 
+            # For large new feature groups, try interface-first splitting
+            if is_new_feature and size > target_patch_size * 2:
+                print(f"  [Phase 4]     Large atomic group detected, trying interface-first split...")
+                layer_patches = self._split_by_layer(group.change_ids, change_map, target_patch_size)
+                if len(layer_patches) > 1:
+                    print(f"  [Phase 4]     Split into {len(layer_patches)} layer-based patches")
+                    patch_candidates.extend(layer_patches)
+                    continue
+
             patch_candidates.append({
                 'change_ids': set(group.change_ids),
                 'size': size,
@@ -79,6 +122,20 @@ class PatchSplitter:
         assigned = set()
         for group in atomic_groups:
             assigned.update(group.change_ids)
+
+        # For new features, group individual changes by layer first
+        unassigned_changes = [c for c in changes if c.id not in assigned]
+
+        if is_new_feature and len(unassigned_changes) > 5:
+            print(f"  [Phase 4] Grouping {len(unassigned_changes)} unassigned changes by layer...")
+            unassigned_ids = [c.id for c in unassigned_changes]
+            layer_patches = self._split_by_layer(unassigned_ids, change_map, target_patch_size)
+            if layer_patches:
+                print(f"  [Phase 4]   Created {len(layer_patches)} layer-based patches from unassigned changes")
+                patch_candidates.extend(layer_patches)
+                # Mark all as assigned
+                for lp in layer_patches:
+                    assigned.update(lp['change_ids'])
 
         individual_count = 0
         print(f"  [Phase 4] Adding individual changes not in atomic groups...")
@@ -117,6 +174,143 @@ class PatchSplitter:
         print(f"  [Phase 4] Topological sort complete")
 
         return sorted_patches
+
+    def _split_by_layer(
+        self,
+        change_ids: List[str],
+        change_map: Dict[str, Change],
+        target_size: int
+    ) -> List[Dict]:
+        """Split changes into patches based on architectural layers.
+
+        This implements the interface-first splitting strategy:
+        1. Interfaces, types, and models (define contracts first)
+        2. Utility functions
+        3. Core implementations (grouped by sub-package)
+        4. Controllers/handlers (integration layer)
+
+        Args:
+            change_ids: List of change IDs to split
+            change_map: Map of change_id -> Change
+            target_size: Target size for each patch
+
+        Returns:
+            List of patch candidate dictionaries
+        """
+        # Classify changes by layer
+        interfaces = []
+        utils = []
+        controllers = []
+        implementations = {}  # sub-package -> list of change_ids
+
+        for cid in change_ids:
+            if cid not in change_map:
+                continue
+            change = change_map[cid]
+            file_path = change.file.lower()
+
+            if any(pattern in file_path for pattern in INTERFACE_PATTERNS):
+                interfaces.append(cid)
+            elif any(pattern in file_path for pattern in UTIL_PATTERNS):
+                utils.append(cid)
+            elif any(pattern in file_path for pattern in CONTROLLER_PATTERNS):
+                controllers.append(cid)
+            else:
+                # Group implementations by sub-package
+                parts = change.file.split('/')
+                if len(parts) >= 2:
+                    subpackage = '/'.join(parts[:-1])
+                else:
+                    subpackage = 'root'
+                if subpackage not in implementations:
+                    implementations[subpackage] = []
+                implementations[subpackage].append(cid)
+
+        patches = []
+
+        # Create patches for each layer
+        if interfaces:
+            size = sum(change_map[cid].added_lines + change_map[cid].deleted_lines for cid in interfaces)
+            patches.append({
+                'change_ids': set(interfaces),
+                'size': size,
+                'atomic': False,
+                'name': "Interfaces and Models",
+                'description': "Interface definitions, types, and data models"
+            })
+
+        if utils:
+            size = sum(change_map[cid].added_lines + change_map[cid].deleted_lines for cid in utils)
+            patches.append({
+                'change_ids': set(utils),
+                'size': size,
+                'atomic': False,
+                'name': "Utilities",
+                'description': "Utility functions and helpers"
+            })
+
+        # Group implementations by sub-package, potentially merging small ones
+        impl_groups = []
+        current_group = []
+        current_size = 0
+
+        for subpkg, impl_changes in sorted(implementations.items()):
+            subpkg_size = sum(change_map[cid].added_lines + change_map[cid].deleted_lines for cid in impl_changes)
+
+            # If this sub-package alone is large enough, make it its own patch
+            if subpkg_size >= target_size * 0.5:
+                # Save any accumulated small groups first
+                if current_group:
+                    impl_groups.append((current_group, current_size))
+                    current_group = []
+                    current_size = 0
+                impl_groups.append((impl_changes, subpkg_size))
+            else:
+                # Accumulate small sub-packages
+                if current_size + subpkg_size > target_size * 1.5:
+                    # Save current group and start new one
+                    if current_group:
+                        impl_groups.append((current_group, current_size))
+                    current_group = impl_changes
+                    current_size = subpkg_size
+                else:
+                    current_group.extend(impl_changes)
+                    current_size += subpkg_size
+
+        if current_group:
+            impl_groups.append((current_group, current_size))
+
+        # Create patches for implementation groups
+        for idx, (impl_changes, size) in enumerate(impl_groups):
+            # Get the most common sub-package for naming
+            subpkgs = set()
+            for cid in impl_changes:
+                if cid in change_map:
+                    parts = change_map[cid].file.split('/')
+                    if len(parts) >= 2:
+                        subpkgs.add(parts[-2])  # Parent directory name
+
+            name_suffix = f" ({', '.join(list(subpkgs)[:2])})" if subpkgs else f" {idx+1}"
+
+            patches.append({
+                'change_ids': set(impl_changes),
+                'size': size,
+                'atomic': False,
+                'name': f"Implementation{name_suffix}",
+                'description': f"Core implementation files"
+            })
+
+        if controllers:
+            size = sum(change_map[cid].added_lines + change_map[cid].deleted_lines for cid in controllers)
+            patches.append({
+                'change_ids': set(controllers),
+                'size': size,
+                'atomic': False,
+                'name': "Controllers",
+                'description': "Controllers, handlers, and API endpoints"
+            })
+
+        return patches
 
     def _build_atomic_membership(self, atomic_groups: List[AtomicGroup]) -> Dict[str, str]:
         """Build map of change_id -> atomic_group_id."""
@@ -574,26 +768,66 @@ IMPORTANT: Use the additional context (commit message, previous patches) to unde
             print(f"  [Phase 4] Performing topological sort...")
             sorted_ids = list(nx.topological_sort(patch_graph))
             print(f"  [Phase 4] Topological sort successful")
-        except nx.NetworkXError as e:
+        except (nx.NetworkXError, nx.NetworkXUnfeasible) as e:
             # Has cycles - use best effort
             print(f"  [Phase 4] WARNING: Topological sort failed (cycles detected): {e}")
-            print(f"  [Phase 4] Using best-effort ordering")
-            sorted_ids = list(patch_graph.nodes())
+            print(f"  [Phase 4] Detecting and breaking cycles...")
 
-        # Update dependencies in patches
-        print(f"  [Phase 4] Updating patch dependencies...")
+            # Find cycles
+            try:
+                cycles = list(nx.simple_cycles(patch_graph))
+                if cycles:
+                    print(f"  [Phase 4] Found {len(cycles)} cycle(s):")
+                    for i, cycle in enumerate(cycles[:5]):  # Show first 5 cycles
+                        print(f"  [Phase 4]   Cycle {i+1}: {' -> '.join(map(str, cycle))} -> {cycle[0]}")
+
+                    # Break cycles by removing edges with weakest dependencies
+                    for cycle in cycles:
+                        if len(cycle) >= 2:
+                            # Remove edge from last to first node in cycle
+                            patch_graph.remove_edge(cycle[-1], cycle[0])
+                            print(f"  [Phase 4]   Broke cycle by removing edge: {cycle[-1]} -> {cycle[0]}")
+
+                    # Try topological sort again
+                    sorted_ids = list(nx.topological_sort(patch_graph))
+                    print(f"  [Phase 4] Topological sort successful after breaking cycles")
+                else:
+                    print(f"  [Phase 4] No cycles found, using node order")
+                    sorted_ids = list(patch_graph.nodes())
+            except Exception as e2:
+                print(f"  [Phase 4] Cycle detection failed: {e2}")
+                print(f"  [Phase 4] Using best-effort ordering")
+                sorted_ids = list(patch_graph.nodes())
+
+        # Reassign patch IDs to match the sorted order
+        # This ensures that dependencies always point to lower-numbered patches
+        print(f"  [Phase 4] Reassigning patch IDs to match sorted order...")
         patch_map = {p.id: p for p in patches}
+        old_to_new_id = {}
 
-        for patch_id in sorted_ids:
-            patch = patch_map[patch_id]
-            # Get predecessors as dependencies
-            patch.depends_on = list(patch_graph.predecessors(patch_id))
+        for new_id, old_id in enumerate(sorted_ids):
+            old_to_new_id[old_id] = new_id
+
+        # Update patch IDs and dependencies
+        print(f"  [Phase 4] Updating patch dependencies...")
+        sorted_patches = []
+
+        for new_id, old_id in enumerate(sorted_ids):
+            patch = patch_map[old_id]
+            patch.id = new_id
+
+            # Update dependencies to use new IDs
+            old_deps = list(patch_graph.predecessors(old_id))
+            patch.depends_on = [old_to_new_id[old_dep] for old_dep in old_deps if old_dep in old_to_new_id]
+
             if patch.depends_on:
-                print(f"  [Phase 4]   Patch {patch_id} depends on: {patch.depends_on}")
+                print(f"  [Phase 4]   Patch {new_id} depends on: {patch.depends_on}")
 
-        # Return patches in sorted order
-        print(f"  [Phase 4] Returning {len(sorted_ids)} sorted patches")
-        return [patch_map[pid] for pid in sorted_ids]
+            sorted_patches.append(patch)
+
+        # Return patches in sorted order with new IDs
+        print(f"  [Phase 4] Returning {len(sorted_patches)} sorted patches with reassigned IDs")
+        return sorted_patches
 
     def _patch_depends_on(self, patch1: Patch, patch2: Patch) -> bool:
         """Check if patch1 depends on patch2."""

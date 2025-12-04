@@ -2,7 +2,8 @@
 
 import os
 import json
-from typing import List, Dict, Optional
+import hashlib
+from typing import List, Dict, Optional, Set, Tuple
 from .models import PatchSplitResult, Change, Dependency, AtomicGroup, SemanticGroup, Patch
 from .phase1_analysis import DiffParser, DependencyAnalyzer
 from .phase2_graph import DependencyGraph
@@ -10,6 +11,107 @@ from .phase3_grouping import SemanticGrouper
 from .phase4_splitting import PatchSplitter
 from .phase5_validation import PatchValidator, PatchOptimizer
 from .llm_client import LLMClient
+
+
+def calculate_hunk_digest(content: str) -> str:
+    """Calculate a digest for hunk content.
+
+    The digest is based on the actual diff lines (+ and - lines),
+    excluding the @@ header which may differ in line numbers.
+
+    Args:
+        content: The hunk content including @@ header and diff lines
+
+    Returns:
+        A hex digest string
+    """
+    # Extract only the actual change lines (+ and - lines)
+    # This makes the digest independent of line number adjustments
+    lines = content.split('\n')
+    change_lines = []
+
+    for line in lines:
+        # Skip empty lines and @@ headers
+        if not line:
+            continue
+        if line.startswith('@@'):
+            continue
+        # Include +, -, and context lines for accurate matching
+        # but normalize by stripping trailing whitespace
+        change_lines.append(line.rstrip())
+
+    # Create a stable string representation
+    normalized = '\n'.join(change_lines)
+
+    # Calculate MD5 hash (fast and sufficient for comparison)
+    return hashlib.md5(normalized.encode('utf-8')).hexdigest()
+
+
+def extract_hunks_from_patch_file(patch_content: str) -> List[Tuple[str, str, str]]:
+    """Extract individual hunks from a patch file content.
+
+    Args:
+        patch_content: Full content of a patch file
+
+    Returns:
+        List of (file_path, hunk_content, digest) tuples
+    """
+    hunks = []
+    current_file = None
+    current_hunk_lines = []
+    in_hunk = False
+
+    lines = patch_content.split('\n')
+
+    for line in lines:
+        # Skip header comments
+        if line.startswith('#'):
+            continue
+
+        # New file in diff
+        if line.startswith('diff --git'):
+            # Save previous hunk if exists
+            if current_hunk_lines and current_file:
+                hunk_content = '\n'.join(current_hunk_lines)
+                digest = calculate_hunk_digest(hunk_content)
+                hunks.append((current_file, hunk_content, digest))
+                current_hunk_lines = []
+
+            # Extract file path from diff --git line
+            parts = line.split(' ')
+            if len(parts) >= 4:
+                # diff --git a/path b/path
+                current_file = parts[3].lstrip('b/')
+            in_hunk = False
+            continue
+
+        # File headers
+        if line.startswith('index ') or line.startswith('--- ') or line.startswith('+++ '):
+            continue
+
+        # Start of a new hunk
+        if line.startswith('@@'):
+            # Save previous hunk if exists
+            if current_hunk_lines and current_file:
+                hunk_content = '\n'.join(current_hunk_lines)
+                digest = calculate_hunk_digest(hunk_content)
+                hunks.append((current_file, hunk_content, digest))
+
+            current_hunk_lines = [line]
+            in_hunk = True
+            continue
+
+        # Hunk content
+        if in_hunk:
+            current_hunk_lines.append(line)
+
+    # Don't forget the last hunk
+    if current_hunk_lines and current_file:
+        hunk_content = '\n'.join(current_hunk_lines)
+        digest = calculate_hunk_digest(hunk_content)
+        hunks.append((current_file, hunk_content, digest))
+
+    return hunks
 
 
 class CodeSplitterAgent:
@@ -177,7 +279,7 @@ class CodeSplitterAgent:
 
         # Get LLM analysis
         try:
-            analysis = self.llm_client.analyze_dependencies(changes_summary, dep_summary)
+            analysis = self.llm_client.analyze_dependencies(changes_summary, dep_summary, changes)
 
             if 'error' in analysis:
                 print(f"  LLM error: {analysis['error']}")
@@ -227,7 +329,7 @@ class CodeSplitterAgent:
         dep_summary = self._summarize_dependencies(dependencies)
 
         try:
-            result = self.llm_client.identify_semantic_groups(changes_summary, dep_summary)
+            result = self.llm_client.identify_semantic_groups(changes_summary, dep_summary, changes)
 
             if 'error' in result:
                 print(f"  LLM error: {result['error']}")
@@ -456,8 +558,13 @@ class CodeSplitterAgent:
                                 file_changes[change.file] = []
                             file_changes[change.file].append(change)
 
+                    # Order files: definitions before usages for better readability
+                    ordered_files = self._order_files_by_dependencies(
+                        file_changes, change_map, result
+                    )
+
                     # Write diffs for each file
-                    for file_path in sorted(file_changes.keys()):
+                    for file_path in ordered_files:
                         # Write git diff header
                         f.write(f"diff --git a/{file_path} b/{file_path}\n")
                         f.write(f"index 1234567..abcdefg 100644\n")
@@ -520,7 +627,138 @@ class CodeSplitterAgent:
         # Write apply_patches.sh
         self._write_apply_script(patch_metadata, output_dir)
 
+        # Verify hunk integrity
+        print(f"\n[Hunk Integrity Check]")
+        self._verify_hunk_integrity(diff_text, output_dir, patch_metadata)
+
         print(f"Exported {len(result.patches)} patches to {output_dir}")
+
+    def _order_files_by_dependencies(
+        self,
+        file_changes: Dict[str, List],
+        change_map: Dict[str, Change],
+        result: 'PatchSplitResult'
+    ) -> List[str]:
+        """
+        Order files within a patch so definitions come before usages.
+        This improves readability by showing what's being defined before it's used.
+
+        Args:
+            file_changes: Map of file_path -> list of changes
+            change_map: Map of change_id -> Change object
+            result: PatchSplitResult with dependency information
+
+        Returns:
+            Ordered list of file paths
+        """
+        import networkx as nx
+
+        # Build a simple dependency graph between files
+        file_graph = nx.DiGraph()
+
+        # Add all files as nodes
+        for file_path in file_changes.keys():
+            file_graph.add_node(file_path)
+
+        # Add edges: file A depends on file B if any change in A uses symbols from B
+        for file_a, changes_a in file_changes.items():
+            for file_b, changes_b in file_changes.items():
+                if file_a != file_b:
+                    # Check if any change in file_a depends on any change in file_b
+                    for change_a in changes_a:
+                        for change_b in changes_b:
+                            # Check dependencies via the dependency graph
+                            if hasattr(result, 'atomic_groups'):
+                                # Use the dependency graph from Phase 2 if available
+                                # For now, use a simple heuristic: check symbol usage
+                                # A file depends on B if it uses symbols defined in B
+
+                                # log defined symbols in file_b
+                                print(f"[Export]     Symbols defined in {file_b}: {[sym.name for sym in change_b.symbols]}")
+                                symbols_defined_in_b = set()
+                                for sym in change_b.symbols:
+                                    symbols_defined_in_b.add(sym.name)
+
+                                # Check if change_a uses any of these symbols
+                                # This is approximate - in practice we'd check the actual dependencies
+                                # For now, just use symbol names as a heuristic
+                                print(f"[Export]     Symbols used in {file_a}: {[sym.name for sym in change_a.symbols]}")
+                                for sym in change_a.symbols:
+                                    if sym.name in symbols_defined_in_b:
+                                        file_graph.add_edge(file_a, file_b)
+                                        break
+
+        # Topological sort to get definition order
+        try:
+            ordered = list(nx.topological_sort(file_graph))
+        except (nx.NetworkXError, nx.NetworkXUnfeasible) as e:
+            # If there's a cycle or unfeasible sort, handle it gracefully
+            print(f"[Export]     Warning: File ordering has cycles, breaking cycles...")
+
+            # Find and break cycles using strongly connected components (more efficient)
+            # This approach uses SCCs instead of simple_cycles which can be exponential
+            try:
+                # Iteratively break cycles by condensing SCCs
+                max_iterations = 100  # Safety limit
+                iteration = 0
+                edges_removed_total = 0
+
+                while iteration < max_iterations:
+                    # Find strongly connected components
+                    sccs = list(nx.strongly_connected_components(file_graph))
+
+                    # Find SCCs with more than 1 node (these are cyclic)
+                    cyclic_sccs = [scc for scc in sccs if len(scc) > 1]
+
+                    if not cyclic_sccs:
+                        # No more cycles
+                        break
+
+                    if iteration == 0:
+                        print(f"[Export]     Found {len(cyclic_sccs)} strongly connected component(s) with cycles")
+
+                    # For each cyclic SCC, remove one edge to break it
+                    for scc in cyclic_sccs:
+                        scc_nodes = list(scc)
+                        # Find an edge within this SCC and remove it
+                        edge_removed = False
+                        for node in scc_nodes:
+                            if edge_removed:
+                                break
+                            for neighbor in list(file_graph.neighbors(node)):
+                                if neighbor in scc:
+                                    file_graph.remove_edge(node, neighbor)
+                                    if iteration == 0:  # Only print for first iteration to avoid spam
+                                        print(f"[Export]     Breaking cycle: {node} → {neighbor}")
+                                    edges_removed_total += 1
+                                    edge_removed = True
+                                    break
+
+                    iteration += 1
+
+                if iteration >= max_iterations:
+                    print(f"[Export]     Warning: Reached max iterations breaking cycles, using alphabetical order")
+                    ordered = sorted(file_changes.keys())
+                elif edges_removed_total > 0:
+                    print(f"[Export]     Removed {edges_removed_total} edge(s) to break cycles")
+                    # Try topological sort again
+                    try:
+                        ordered = list(nx.topological_sort(file_graph))
+                        print(f"[Export]     Successfully ordered files after breaking cycles")
+                    except:
+                        # Still failed, fall back to alphabetical
+                        ordered = sorted(file_changes.keys())
+                        print(f"[Export]     Falling back to alphabetical order")
+                else:
+                    # No cycles found, just use alphabetical
+                    ordered = sorted(file_changes.keys())
+            except Exception as cycle_error:
+                print(f"[Export]     Cycle detection failed: {cycle_error}")
+                # Fall back to alphabetical order
+                ordered = sorted(file_changes.keys())
+                print(f"[Export]     Falling back to alphabetical order")
+
+        return ordered
 
     def _categorize_patch(self, patch: Patch, change_map: Dict[str, Change]) -> str:
         """Categorize patch based on changes."""
@@ -617,37 +855,42 @@ class CodeSplitterAgent:
             }
 
             for change in changes:
+                # Include more context for better analysis (up to 1000 chars)
                 change_info = {
                     "file": change.file,
                     "type": change.type,
                     "symbols": [{"name": s.name, "type": s.type} for s in change.symbols],
                     "added_lines": change.added_lines,
                     "deleted_lines": change.deleted_lines,
-                    "content": change.content[:500]  # Limit content size
+                    "content": change.content[:1000]  # Increased from 500
                 }
                 context["changes"].append(change_info)
 
             # Request descriptions from LLM
-            prompt = f"""Analyze the following code changes and generate a concise, meaningful description for each change.
-Each description should explain WHAT the change is trying to achieve, not just what files it modifies.
+            prompt = f"""You are analyzing code changes in a patch titled "{patch.name}".
+Overall patch purpose: {patch.description}
 
-Patch: {patch.name}
-Description: {patch.description}
+For each change below, generate a meaningful description that:
+1. Explains the SPECIFIC PURPOSE of that change (not just what file/function it touches)
+2. Focuses on the BUSINESS LOGIC or FUNCTIONALITY being changed
+3. Relates the change to the overall patch goal when relevant
+4. Is concise (one sentence, ~10-20 words)
 
-Changes:
+Changes to analyze:
 {json.dumps(context['changes'], indent=2)}
 
-Return a JSON object with a "descriptions" array containing one description per change.
-Each description should be a single sentence that explains the purpose or effect of the change.
+Return JSON with a "descriptions" array containing exactly {len(changes)} descriptions (one per change, in order).
 
-Example good descriptions:
-- "Adds a filter to skip commits marked as 'deleted' when listing commits"
-- "Implements error handling for network timeouts in API requests"
-- "Refactors authentication logic to use JWT tokens instead of sessions"
+Good description examples:
+- "Extracts patch generation logic into a reusable function to reduce code duplication"
+- "Adds validation to ensure filenames are properly trimmed before processing"
+- "Removes deprecated authentication method in favor of JWT tokens"
+- "Implements retry logic for network failures with exponential backoff"
 
-Example bad descriptions:
-- "Modifies src/api.py"
-- "Changes function foo"
+Bad description examples (too generic):
+- "Modifies server.js"
+- "Adds 251 lines to code_explainer_ui/backend/server.js"
+- "Changes function generatePatch"
 - "Updates file"
 """
 
@@ -662,16 +905,24 @@ Example bad descriptions:
                 response_format={"type": "json_object"}
             )
 
-            response = json.loads(response_text)
+            # Import the extraction function
+            from .llm_client import extract_json_from_response
+            response = extract_json_from_response(response_text)
 
             # Parse response
             if isinstance(response, dict) and 'descriptions' in response:
                 descriptions = response['descriptions']
                 if len(descriptions) == len(changes):
+                    print(f"  [Annotations] LLM generated {len(descriptions)} descriptions")
+                    # Show first few descriptions for debugging
+                    for i, desc in enumerate(descriptions[:3]):
+                        print(f"  [Annotations]   {i+1}. {desc[:80]}...")
                     return descriptions
+                else:
+                    print(f"  [Annotations] LLM returned {len(descriptions)} descriptions for {len(changes)} changes")
 
             # Fallback if parsing fails
-            print("  LLM description generation failed, using fallback")
+            print("  [Annotations] LLM description generation failed, using fallback")
 
         except Exception as e:
             print(f"  LLM description generation error: {e}")
@@ -789,7 +1040,8 @@ Example bad summaries:
                 response_format={"type": "json_object"}
             )
 
-            response = json.loads(response_text)
+            from .llm_client import extract_json_from_response
+            response = extract_json_from_response(response_text)
 
             # Parse response
             if isinstance(response, dict) and 'summary' in response:
@@ -894,6 +1146,82 @@ Example bad summaries:
 
         # Make script executable
         os.chmod(script_path, 0o755)
+
+    def _verify_hunk_integrity(
+        self,
+        original_diff: str,
+        output_dir: str,
+        patch_metadata: List[Dict]
+    ):
+        """Verify that all hunks from the original diff are present in the output patches.
+
+        Calculates digests for each hunk in the input and output, then compares them.
+
+        Args:
+            original_diff: The original diff text
+            output_dir: Directory containing the output patch files
+            patch_metadata: List of patch metadata dicts with filenames
+        """
+        # Calculate digests for input hunks
+        input_hunks = extract_hunks_from_patch_file(original_diff)
+        input_digests = {}  # digest -> (file, hunk_content)
+        for file_path, hunk_content, digest in input_hunks:
+            input_digests[digest] = (file_path, hunk_content)
+
+        print(f"  Input hunks: {len(input_hunks)}")
+
+        # Calculate digests for output hunks
+        output_digests = {}  # digest -> (patch_file, file_path, hunk_content)
+        total_output_hunks = 0
+
+        for patch_meta in patch_metadata:
+            patch_filepath = os.path.join(output_dir, patch_meta['filename'])
+            if os.path.exists(patch_filepath):
+                with open(patch_filepath, 'r') as f:
+                    patch_content = f.read()
+
+                output_hunks = extract_hunks_from_patch_file(patch_content)
+                total_output_hunks += len(output_hunks)
+
+                for file_path, hunk_content, digest in output_hunks:
+                    output_digests[digest] = (patch_meta['filename'], file_path, hunk_content)
+
+        print(f"  Output hunks: {total_output_hunks}")
+
+        # Compare digests
+        input_only = set(input_digests.keys()) - set(output_digests.keys())
+        output_only = set(output_digests.keys()) - set(input_digests.keys())
+        common = set(input_digests.keys()) & set(output_digests.keys())
+
+        print(f"  Common hunks: {len(common)}")
+
+        if input_only:
+            print(f"  ⚠ Hunks only in input (MISSING from output): {len(input_only)}")
+            for digest in list(input_only)[:5]:  # Show first 5
+                file_path, hunk_content = input_digests[digest]
+                # Show first line of hunk for identification
+                first_line = hunk_content.split('\n')[0] if hunk_content else ''
+                print(f"    - {file_path}: {first_line[:60]}...")
+            if len(input_only) > 5:
+                print(f"    ... and {len(input_only) - 5} more")
+
+        if output_only:
+            print(f"  ⚠ Hunks only in output (NOT in input): {len(output_only)}")
+            for digest in list(output_only)[:5]:  # Show first 5
+                patch_file, file_path, hunk_content = output_digests[digest]
+                first_line = hunk_content.split('\n')[0] if hunk_content else ''
+                print(f"    - {patch_file}/{file_path}: {first_line[:60]}...")
+            if len(output_only) > 5:
+                print(f"    ... and {len(output_only) - 5} more")
+
+        if not input_only and not output_only:
+            print(f"  ✓ All hunks accounted for!")
+        else:
+            print(f"\n  Summary:")
+            print(f"    Total input hunks:  {len(input_hunks)}")
+            print(f"    Total output hunks: {total_output_hunks}")
+            print(f"    Missing from output: {len(input_only)}")
+            print(f"    Extra in output:    {len(output_only)}")
 
     def resplit_patch(
         self,

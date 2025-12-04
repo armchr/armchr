@@ -8,16 +8,31 @@ from dataclasses_json import dataclass_json
 @dataclass_json
 @dataclass
 class Symbol:
-    """Represents a code symbol (function, class, variable, etc.)."""
+    """Represents a code symbol (function, class, variable, etc.).
+
+    Symbols can be either definitions (declared in this hunk) or usages
+    (referenced from another package/file).
+    """
 
     name: str
-    type: Literal["function", "class", "variable", "method", "import", "type", "interface"]
+    type: Literal["function", "class", "variable", "method", "import", "type", "interface", "field"]
     file: str
     line: int
+    role: Literal["definition", "usage"] = "definition"  # Whether this is a definition or usage
+    package: Optional[str] = None  # Package/module the symbol belongs to (for usages)
+    qualified_name: Optional[str] = None  # Full qualified name (e.g., "smells.DetectorRegistry")
     scope: Optional[str] = None  # Parent class/module name
 
     def __hash__(self):
-        return hash((self.name, self.type, self.file, self.line))
+        return hash((self.name, self.type, self.file, self.line, self.role))
+
+    def get_qualified_name(self) -> str:
+        """Get the fully qualified name of this symbol."""
+        if self.qualified_name:
+            return self.qualified_name
+        if self.package:
+            return f"{self.package}.{self.name}"
+        return self.name
 
 
 @dataclass_json
