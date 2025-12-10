@@ -5,7 +5,41 @@ All notable changes to Armchair will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [v1] - 2025-11-06
+## [v0.2] - 2025-12-04
+
+### Added
+- **Enhanced Symbol Analysis**: Extracts both symbol definitions AND usages for accurate cross-file dependency detection
+  - Qualified name support (e.g., `package.Symbol`) for precise dependency resolution
+  - Type usage tracking for Go and statically-typed languages
+  - New `role` field to distinguish definitions from usages
+- **Hunk Integrity Verification**: Ensures patches remain valid across different applications
+  - MD5 digest calculation for stable hunk identification
+  - Automatic verification during patch export
+  - Integrity checks independent of line number adjustments
+- **Dependency-Ordered File Output**: Files in patches are now ordered so definitions appear before usages
+  - Improves patch readability and review experience
+  - Automatic cycle detection and breaking for complex dependencies
+- **QUICKSTART.md**: New quick start guide for faster onboarding
+
+### Changed
+- **Improved LLM Context**: Full Change objects now passed to LLM for better semantic analysis
+  - More accurate dependency inference
+  - Better semantic grouping recommendations
+- **Symbol Model Updates**: Enhanced `Symbol` dataclass with new fields
+  - Added `role` (definition/usage), `package`, `qualified_name`, and `field` type
+  - New `get_qualified_name()` method for fully qualified symbol names
+- **Two-Phase Dependency Analysis**: New architecture for dependency detection
+  - Phase 1: Build symbol index from all definitions
+  - Phase 2: Resolve usages against the index with qualified name lookup
+  - Fallback to import-based package dependencies when symbol lookup fails
+
+### Improved
+- More accurate cross-package dependency detection in Go and other languages
+- Better handling of type identifiers and field references
+- Reduced false positives in import statement detection
+- Enhanced tree-sitter traversal with context-aware identifier extraction
+
+## [v0.1] - 2025-11-06
 
 ### Added
 - **Reviewer Agent**: AI-powered code review capabilities for commits and uncommitted changes
@@ -31,7 +65,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reduced manual configuration file editing
 - More intuitive onboarding flow
 
-## [v0] - 2025-11-01
+## [v0.0] - 2025-11-01
 
 ### Added
 - **Splitter Agent**: Initial release of commit/change splitting functionality

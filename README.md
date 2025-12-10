@@ -368,9 +368,9 @@ MIT License. See [LICENSE](LICENSE) for details.
 
 ## Changelog
 
-See [Releases](https://github.com/armchr/armchr/releases) for version history.
+See [CHANGELOG.md](CHANGELOG.md) and [Releases](https://github.com/armchr/armchr/releases) for version history.
 
-**Current Version:** v0 (Preview)
+**Current Version:** v0.2
 
 ---
 
