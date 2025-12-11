@@ -1,0 +1,213 @@
+/* Prism.js Light Theme for Syntax Highlighting */
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+  color: #6a737d;
+  font-style: italic;
+}
+
+.token.punctuation {
+  color: #24292e;
+}
+
+.token.property,
+.token.tag,
+.token.boolean,
+.token.number,
+.token.constant,
+.token.symbol,
+.token.deleted {
+  color: #d73a49;
+}
+
+.token.selector,
+.token.attr-name,
+.token.string,
+.token.char,
+.token.builtin,
+.token.inserted {
+  color: #032f62;
+}
+
+.token.operator,
+.token.entity,
+.token.url,
+.language-css .token.string,
+.style .token.string {
+  color: #d73a49;
+  background: transparent;
+}
+
+.token.atrule,
+.token.attr-value,
+.token.keyword {
+  color: #d73a49;
+}
+
+.token.function,
+.token.class-name {
+  color: #6f42c1;
+}
+
+.token.regex,
+.token.important,
+.token.variable {
+  color: #e36209;
+}
+
+.token.important,
+.token.bold {
+  font-weight: bold;
+}
+
+.token.italic {
+  font-style: italic;
+}
+
+.token.entity {
+  cursor: help;
+}
+
+/* Line highlight for diff viewer */
+.diff-code-line {
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+/* Custom diff viewer overrides */
+.d2h-wrapper {
+  border: 1px solid #e1e4e8;
+  border-radius: 6px;
+}
+
+.d2h-file-header {
+  background-color: #f6f8fa;
+  border-bottom: 1px solid #e1e4e8;
+  padding: 5px 10px;
+}
+
+.d2h-code-line {
+  font-size: 12px;
+  font-family: 'SFMono-Regular', 'Consolas', 'Liberation Mono', 'Menlo', monospace;
+}
+
+.d2h-ins {
+  background-color: #e6ffed;
+  border-color: #34d058;
+}
+
+.d2h-del {
+  background-color: #ffeef0;
+  border-color: #d73a49;
+}
+
+.d2h-code-line-prefix {
+  padding: 0 8px;
+  text-align: center;
+  width: 1%;
+}
+
+.d2h-code-line-ctn {
+  padding: 0 8px;
+  width: auto;
+}
+
+/* React Diff Viewer Equal Split Fix */
+.react-diff-viewer {
+  width: 100% !important;
+  font-family: 'SFMono-Regular', 'Consolas', 'Liberation Mono', 'Menlo', monospace !important;
+}
+
+.react-diff-viewer table {
+  width: 100% !important;
+  table-layout: fixed !important;
+  border-collapse: collapse !important;
+}
+
+.react-diff-viewer tbody {
+  width: 100% !important;
+}
+
+.react-diff-viewer tr {
+  width: 100% !important;
+  display: table-row !important;
+}
+
+.react-diff-viewer td {
+  width: 50% !important;
+  vertical-align: top !important;
+  word-wrap: break-word !important;
+  word-break: break-word !important;
+}
+
+.react-diff-viewer .diff-gutter {
+  width: 50px !important;
+  min-width: 50px !important;
+  max-width: 50px !important;
+}
+
+.react-diff-viewer .diff-line {
+  width: calc(50% - 25px) !important;
+}
+
+/* Split view container */
+.react-diff-viewer-split {
+  display: flex !important;
+  width: 100% !important;
+}
+
+.react-diff-viewer-split > div {
+  flex: 1 1 50% !important;
+  width: 50% !important;
+  min-width: 0 !important;
+}
+
+/* Line content styling */
+.react-diff-viewer pre {
+  margin: 0 !important;
+  padding: 0 !important;
+  white-space: pre-wrap !important;
+  word-break: break-word !important;
+  overflow-wrap: break-word !important;
+  font-size: 13px !important;
+  line-height: 1.2 !important;
+}
+
+.react-diff-viewer code {
+  background: transparent !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  font-size: inherit !important;
+}
+
+/* Annotation tooltip styling */
+.diff-annotation-container {
+  position: relative;
+  width: 100%;
+}
+
+.diff-annotation-icon {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  background-color: rgba(255, 152, 0, 0.1);
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.diff-annotation-icon:hover {
+  background-color: rgba(255, 152, 0, 0.2);
+}
+
+/* Ensure hunk headers have enough padding for annotation icons */
+.react-diff-viewer tr:has(.diff-annotation-icon) td {
+  padding-right: 40px !important;
+}

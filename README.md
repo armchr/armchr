@@ -24,6 +24,7 @@ Armchair bridges the gap between AI-assisted coding and real developer productiv
 - [License](#license)
 - [Changelog](#changelog)
 - [Advanced: Manual Docker](#advanced-manual-docker)
+- [Development](#development)
 
 ---
 
@@ -72,7 +73,9 @@ The script will:
 Breaks down commits into logical, reviewable chunks:
 - Identifies code structures and relationships
 - Generates structured output for downstream analysis
-- Supports multiple programming languages
+- Supports multiple programming languages (Python, Go, JS/TS, Java, Rust, C/C++)
+
+> **Standalone usage:** The Splitter Agent can be used independently via CLI. See the [Code Splitter Agent README](code-splitter-agent/README.md#quick-start) for details.
 
 ### Reviewer Agent
 AI-powered code review:
@@ -398,3 +401,16 @@ docker stop armchair-dashboard      # Stop
 docker start armchair-dashboard     # Start
 docker rm armchair-dashboard        # Remove
 ```
+
+---
+
+## Development
+
+For local development, building from source, or contributing to Armchair, see the **[code_explainer_ui README](code_explainer_ui/README.md)**. It contains:
+
+- Full architecture documentation (React frontend, Express.js backend, AI agents)
+- Local development setup with Make commands
+- Environment variables and configuration details
+- API endpoint reference
+- MCP server mode documentation
+- Project structure and key technologies

@@ -1,0 +1,29 @@
+{
+  "name": "armchair-backend",
+  "version": "1.0.0",
+  "description": "ArmChair backend server - Git commit management and AI-powered code review API",
+  "type": "module",
+  "main": "server.js",
+  "bin": {
+    "armchair-mcp": "./mcp-server.mjs"
+  },
+  "scripts": {
+    "start": "node server.js --output ${ARMCHAIR_OUTPUT:-../../output} --root-dir ${ARMCHAIR_ROOT_DIR:-$HOME}",
+    "dev": "node server.js --output ${ARMCHAIR_OUTPUT:-../../output} --root-dir ${ARMCHAIR_ROOT_DIR:-$HOME}",
+    "dev:mcp": "node server.js --mcp --output ${ARMCHAIR_OUTPUT:-../../output} --root-dir ${ARMCHAIR_ROOT_DIR:-$HOME}"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.20.2",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "fs-extra": "^11.3.2",
+    "yaml": "^2.8.1",
+    "yargs": "^17.7.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

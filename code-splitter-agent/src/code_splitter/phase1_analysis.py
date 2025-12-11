@@ -413,8 +413,20 @@ class DependencyAnalyzer:
             for usage in usages:
                 qualified_name = usage.get_qualified_name()
 
-                # Try to find the defining change
+                # Try to find the defining change using multiple lookup strategies
                 defining_change_id = symbol_index.get(qualified_name)
+
+                # Strategy 1: Direct qualified name lookup (e.g., "CodeGraph.UpdateNodeMetaData")
+                if not defining_change_id:
+                    # Try Type.Method format (for method calls like t.CodeGraph.Method())
+                    if usage.package and usage.name:
+                        type_method_key = f"{usage.package}.{usage.name}"
+                        defining_change_id = symbol_index.get(type_method_key)
+
+                # Strategy 2: Method name lookup (e.g., "method:UpdateNodeMetaData")
+                if not defining_change_id and usage.type == 'method':
+                    method_key = f"method:{usage.name}"
+                    defining_change_id = symbol_index.get(method_key)
 
                 if defining_change_id and defining_change_id != change.id:
                     dep_key = (change.id, defining_change_id, 'symbol')
@@ -498,6 +510,7 @@ class DependencyAnalyzer:
         Index structure:
         - "smells.DetectorRegistry" -> "internal/smells/registry.go:hunk_0"
         - "signals.ClassInfoExtractor" -> "internal/signals/extractor.go:hunk_0"
+        - "CodeGraph.UpdateNodeMetaData" -> "internal/service/codegraph/code_graph.go:hunk_0" (for methods)
         """
         index = {}
 
@@ -516,6 +529,22 @@ class DependencyAnalyzer:
                 # Also index by just the symbol name (for same-package references)
                 # Use file:symbol as key to avoid conflicts
                 index[f"{change.file}:{symbol.name}"] = change.id
+
+                # For methods, also index by ReceiverType.MethodName
+                # This allows matching method calls like t.CodeGraph.UpdateNodeMetaData()
+                # where CodeGraph is the receiver type
+                if symbol.type == 'method' and symbol.scope:
+                    # symbol.scope contains the receiver type (e.g., "CodeGraph")
+                    receiver_qualified = f"{symbol.scope}.{symbol.name}"
+                    index[receiver_qualified] = change.id
+
+                # Also index just by the method/function name for looser matching
+                # This helps when the receiver type isn't exactly known
+                if symbol.type in ['method', 'function']:
+                    # Use a simple name index as a fallback
+                    simple_key = f"method:{symbol.name}"
+                    if simple_key not in index:  # Don't overwrite more specific entries
+                        index[simple_key] = change.id
 
         return index
 

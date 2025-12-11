@@ -686,50 +686,120 @@ class LanguageParser:
         import_map: Dict[str, str],
         definitions: List[Symbol]
     ) -> List[Symbol]:
-        """Extract Go symbol usages (qualified references to external symbols)."""
+        """Extract Go symbol usages (qualified references to external symbols).
+
+        This handles:
+        1. Package-qualified references: pkg.Symbol (e.g., fmt.Println)
+        2. Method calls on struct fields: t.Field.Method() (e.g., t.CodeGraph.UpdateNodeMetaData)
+        3. Qualified types: *pkg.Type
+        """
         usages = []
         seen_usages = set()  # (qualified_name, line) to avoid duplicates
 
         # Get names defined in this file to exclude from usages
         defined_names = {d.name for d in definitions}
 
+        def get_selector_chain(node) -> List[str]:
+            """Get the full chain of identifiers in a nested selector expression.
+
+            For 't.CodeGraph.UpdateNodeMetaData', returns ['t', 'CodeGraph', 'UpdateNodeMetaData']
+            """
+            chain = []
+            current = node
+            while current:
+                if current.type == 'selector_expression':
+                    field = self._find_child_by_type(current, 'field_identifier')
+                    if field:
+                        chain.insert(0, code[field.start_byte:field.end_byte])
+                    # Move to the operand (left side)
+                    operand = None
+                    for child in current.children:
+                        if child.type in ['identifier', 'selector_expression']:
+                            operand = child
+                            break
+                    current = operand
+                elif current.type == 'identifier':
+                    chain.insert(0, code[current.start_byte:current.end_byte])
+                    break
+                else:
+                    break
+            return chain
+
         def visit(node):
-            # Selector expression: package.Symbol or receiver.Method
+            # Selector expression: package.Symbol or receiver.Method or t.Field.Method
             if node.type == 'selector_expression':
-                operand = self._find_child_by_type(node, 'identifier')
-                field = self._find_child_by_type(node, 'field_identifier')
+                # Get the full selector chain
+                chain = get_selector_chain(node)
 
-                if operand and field:
-                    pkg_alias = code[operand.start_byte:operand.end_byte]
-                    symbol_name = code[field.start_byte:field.end_byte]
+                if len(chain) >= 2:
+                    first_part = chain[0]
+                    last_part = chain[-1]
+                    line = base_line_number + node.start_point[0]
 
-                    # Check if this is a package reference (pkg in import_map)
-                    if pkg_alias in import_map:
-                        full_pkg_path = import_map[pkg_alias]
-                        qualified_name = f"{pkg_alias}.{symbol_name}"
-                        line = base_line_number + node.start_point[0]
+                    # Case 1: Package-qualified reference (first part is a package)
+                    if first_part in import_map:
+                        # Direct package.Symbol reference
+                        if len(chain) == 2:
+                            symbol_name = last_part
+                            full_pkg_path = import_map[first_part]
+                            qualified_name = f"{first_part}.{symbol_name}"
 
-                        if (qualified_name, line) not in seen_usages:
-                            seen_usages.add((qualified_name, line))
+                            if (qualified_name, line) not in seen_usages:
+                                seen_usages.add((qualified_name, line))
 
-                            # Determine type based on naming convention
-                            # In Go: PascalCase = exported type, camelCase = function/method
-                            symbol_type = 'type' if symbol_name[0].isupper() else 'function'
+                                # Determine type based on naming convention
+                                symbol_type = 'type' if symbol_name[0].isupper() else 'function'
 
-                            # Check if it's a function call
-                            parent = node.parent
-                            if parent and parent.type == 'call_expression':
-                                symbol_type = 'function'
+                                # Check if it's a function call
+                                parent = node.parent
+                                if parent and parent.type == 'call_expression':
+                                    symbol_type = 'function'
 
-                            usages.append(Symbol(
-                                name=symbol_name,
-                                type=symbol_type,
-                                file=file_path,
-                                line=line,
-                                role='usage',
-                                package=pkg_alias,
-                                qualified_name=qualified_name
-                            ))
+                                usages.append(Symbol(
+                                    name=symbol_name,
+                                    type=symbol_type,
+                                    file=file_path,
+                                    line=line,
+                                    role='usage',
+                                    package=first_part,
+                                    qualified_name=qualified_name
+                                ))
+
+                    # Case 2: Method call on struct field (e.g., t.CodeGraph.UpdateNodeMetaData)
+                    # When the first part is NOT a package (likely a variable/receiver)
+                    # and it's a call expression, extract the method name
+                    elif len(chain) >= 2:
+                        parent = node.parent
+                        is_call = parent and parent.type == 'call_expression'
+
+                        if is_call:
+                            method_name = last_part
+                            # For method calls, the second-to-last part might be the type name
+                            # e.g., in t.CodeGraph.UpdateNodeMetaData, CodeGraph is the type
+                            potential_type = chain[-2] if len(chain) >= 2 else None
+
+                            # Skip if this method is defined in this file
+                            if method_name not in defined_names:
+                                # Create a usage with the method name
+                                # Use the potential type as a hint for matching
+                                if potential_type and potential_type[0].isupper():
+                                    # This looks like Type.Method pattern
+                                    qualified_name = f"{potential_type}.{method_name}"
+                                else:
+                                    # Just use the method name
+                                    qualified_name = method_name
+
+                                if (qualified_name, line) not in seen_usages:
+                                    seen_usages.add((qualified_name, line))
+                                    usages.append(Symbol(
+                                        name=method_name,
+                                        type='method',
+                                        file=file_path,
+                                        line=line,
+                                        role='usage',
+                                        package=potential_type,  # Use the type name as package hint
+                                        qualified_name=qualified_name
+                                    ))
 
             # Qualified type in declarations: *pkg.Type
             elif node.type == 'qualified_type':

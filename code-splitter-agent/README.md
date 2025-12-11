@@ -2,11 +2,15 @@
 
 A tool to intelligently split large code changes into smaller, dependency-aware patches that are easier to review and safer to apply. The agent analyzes code structure, identifies dependencies, and groups related changes while ensuring patches can be applied independently without breaking compilation or runtime behavior.
 
+> **Part of Armchair** — See the [main Armchair README](../README.md#quick-start) for the full dashboard experience with interactive UI.
+
+---
+
 ## Table of Contents
 
+- [Quick Start](#quick-start)
 - [What It Does](#what-it-does)
 - [Key Features](#key-features)
-- [Quick Start](#quick-start)
 - [Installation](#installation)
 - [Usage](#usage)
   - [Basic Examples](#basic-examples)
@@ -14,12 +18,60 @@ A tool to intelligently split large code changes into smaller, dependency-aware 
   - [Working with Monorepos](#working-with-monorepos)
   - [Python API](#python-api)
 - [Architecture](#architecture)
+  - [Five-Phase Pipeline](#five-phase-pipeline)
+  - [Core Components](#core-components)
+  - [Dependency Constraints](#dependency-constraints)
+  - [Data Models](#data-models)
 - [Output Format](#output-format)
 - [Configuration](#configuration)
 - [Advanced Features](#advanced-features)
+  - [LLM Integration](#llm-integration)
+  - [Quality Metrics](#quality-metrics)
 - [Limitations](#limitations)
 - [Contributing](#contributing)
 - [License](#license)
+
+---
+
+## Quick Start
+
+Get up and running in 60 seconds:
+
+```bash
+# 1. Clone and setup
+git clone https://github.com/armchr/armchr.git
+cd armchr/code-splitter-agent
+make setup && source venv/bin/activate
+
+# 2. Configure your repository
+cp source.example.yaml source.yaml
+# Edit source.yaml with your repository path:
+#   repositories:
+#     - name: "myproject"
+#       path: "/path/to/your/repo"
+
+# 3. Split uncommitted changes
+python -m code_splitter.main split --source-config source.yaml --repo myproject
+
+# 4. Apply the generated patches
+cd /path/to/your/repo
+./output/uncommitted_*/apply_patches.sh
+```
+
+**That's it!** Your large diff is now split into ordered, reviewable patches.
+
+### Quick Start with LLM Enhancement
+
+For better semantic understanding and naming (optional):
+
+```bash
+export OPENAI_API_KEY="your-key"  # or ANTHROPIC_API_KEY
+
+python -m code_splitter.main split \
+  --source-config source.yaml \
+  --repo myproject \
+  --api-key $OPENAI_API_KEY
+```
 
 ---
 
@@ -96,69 +148,34 @@ Each patch includes:
 
 ---
 
-## Quick Start
-
-```bash
-# 1. Install
-git clone https://github.com/yourusername/code-splitter-agent.git
-cd code-splitter-agent
-make setup
-source venv/bin/activate
-
-# 2. Create source configuration
-cp source.example.yaml source.yaml
-# Edit source.yaml with your repository path
-
-# 3. Split uncommitted changes
-python -m code_splitter.main split \
-  --source-config source.yaml \
-  --repo myproject \
-  --output-dir ./output
-
-# 4. Apply patches
-cd /path/to/your/repo
-chmod +x ./output/uncommitted_TIMESTAMP/apply_patches.sh
-./output/uncommitted_TIMESTAMP/apply_patches.sh
-```
-
----
-
 ## Installation
+
+> Already followed [Quick Start](#quick-start)? Skip to [Usage](#usage).
 
 ### Prerequisites
 
 - Python 3.10 or higher
 - Git
-- Virtual environment (recommended)
 
-### Method 1: Quick Setup (Recommended)
+### Option 1: Quick Setup (Recommended)
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/code-splitter-agent.git
-cd code-splitter-agent
-
-# Set up virtual environment and install everything
+git clone https://github.com/armchr/armchr.git
+cd armchr/code-splitter-agent
 make setup
-
-# Activate virtual environment
-source venv/bin/activate  # On Linux/macOS
-# or
-venv\Scripts\activate     # On Windows
+source venv/bin/activate  # Linux/macOS
+# or: venv\Scripts\activate  # Windows
 ```
 
-### Method 2: Manual Installation
+### Option 2: Manual Installation
 
 ```bash
+git clone https://github.com/armchr/armchr.git
+cd armchr/code-splitter-agent
 
-# Create virtual environment
 python3 -m venv venv
 source venv/bin/activate
-
-# Install dependencies
 pip install -r requirements.txt
-
-# Install package in development mode
 pip install -e .
 ```
 

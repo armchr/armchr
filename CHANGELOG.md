@@ -5,6 +5,36 @@ All notable changes to Armchair will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **code_explainer_ui**: Added complete frontend and backend source code to the repository
+  - React frontend with Material-UI for the Armchair dashboard
+  - Express.js backend providing REST API and Git operations
+  - Full development environment with Make commands
+  - MCP (Model Context Protocol) server mode support
+  - Comprehensive documentation for local development and contribution
+- **code-splitter-agent**: New technical documentation and improved README
+  - `EXPLAINER.md`: Comprehensive technical deep-dive explaining the 5-phase pipeline architecture
+  - Detailed documentation of all phases: Analysis, Graph Construction, Semantic Grouping, Patch Splitting, and Validation
+  - Debugging guide for dependency detection issues
+  - Extension points documentation for adding language support
+
+### Improved
+- **code-splitter-agent**: Enhanced Go method call detection for chained selector expressions
+  - New `get_selector_chain()` helper function to traverse nested selector expressions (e.g., `t.CodeGraph.UpdateNodeMetaData()`)
+  - Correctly extracts method usages from struct field chains like `receiver.Field.Method()`
+  - Builds qualified names (e.g., `CodeGraph.UpdateNodeMetaData`) for accurate dependency matching
+- **code-splitter-agent**: Multi-strategy dependency resolution in Phase 1
+  - Strategy 1: Direct qualified name lookup (e.g., `CodeGraph.UpdateNodeMetaData`)
+  - Strategy 2: Type.Method format lookup for method calls
+  - Strategy 3: Method name fallback lookup (e.g., `method:UpdateNodeMetaData`)
+  - Improved symbol index to include receiver type entries for Go methods
+- **code-splitter-agent**: Updated README with better organization
+  - Quick Start section moved to top for faster onboarding
+  - Detailed Architecture section with Five-Phase Pipeline explanation
+  - Added LLM Integration and Quality Metrics documentation
+
 ## [v0.2] - 2025-12-04
 
 ### Added
