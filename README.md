@@ -53,6 +53,8 @@ The script will:
 
 ### First-Time Setup
 
+![Dashboard Overview](images/dashboard-overview.png)
+
 1. Click the **Settings** icon (⚙️) in the dashboard
 2. Configure your LLM:
    | Provider | API Base URL | Model |
@@ -77,17 +79,51 @@ Breaks down commits into logical, reviewable chunks:
 
 > **Standalone usage:** The Splitter Agent can be used independently via CLI. See the [Code Splitter Agent README](code-splitter-agent/README.md#quick-start) for details.
 
-### Reviewer Agent
-AI-powered code review:
-- Analyzes commits and uncommitted changes
-- Provides feedback on code quality and best practices
-- Generates detailed suggestions
+#### Mental Model: Understand Before You Review
+
+When you split a large change, Armchair generates a **mental model** to help reviewers understand the big picture before diving into code:
+
+![Mental Model](images/mental-model-expanded.png)
+
+The mental model includes:
+- **What This Change Does**: High-level summary of the entire changeset
+- **How Patches Progress**: Step-by-step guide through the logical order of patches
+- **Key Concepts**: Important domain concepts and patterns introduced
+- **Review Tips**: Suggestions for what to focus on during review
+
+#### Patch Splits: Large Changes Made Reviewable
+
+A single large commit gets split into multiple smaller, logically-grouped patches:
+
+![Patch Splits](images/mental-model.png)
+
+Each patch shows:
+- Descriptive title explaining what it does
+- Files affected with annotation counts
+- Lines changed summary
 
 ### Dashboard
 Interactive web UI at http://localhost:8686:
 - Browse branches, commits, and uncommitted changes
 - Run splitter and reviewer analysis
 - Visualize annotated code explanations
+
+#### Change Annotations: AI-Explained Code Changes
+
+Each code change in a split patch includes AI-generated annotations that explain what the change does:
+
+![Change Annotations](images/change-annotations.png)
+
+The annotated diff viewer shows:
+- **Inline annotations**: AI explanations embedded directly in the diff
+- **Side-by-side diff**: Before and after comparison
+- **Line-level context**: Annotations reference specific line ranges
+
+### Reviewer Agent
+AI-powered code review:
+- Analyzes commits and uncommitted changes
+- Provides feedback on code quality and best practices
+- Generates detailed suggestions
 
 **Backend API** available at http://localhost:8787 for programmatic access.
 
