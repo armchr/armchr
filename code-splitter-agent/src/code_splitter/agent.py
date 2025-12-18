@@ -4,7 +4,7 @@ import os
 import json
 import hashlib
 from typing import List, Dict, Optional, Set, Tuple
-from .models import PatchSplitResult, Change, Dependency, AtomicGroup, SemanticGroup, Patch
+from .models import PatchSplitResult, Change, Dependency, AtomicGroup, SemanticGroup, Patch, MentalModel
 from .phase1_analysis import DiffParser, DependencyAnalyzer
 from .phase2_graph import DependencyGraph
 from .phase3_grouping import SemanticGrouper
@@ -240,6 +240,14 @@ class CodeSplitterAgent:
         if suggestions:
             print(f"  Optimization suggestions: {suggestions}")
 
+        # Generate mental model for reviewers (LLM only)
+        mental_model = None
+        if self.use_llm and self.llm_client:
+            print("  Generating mental model for reviewers...")
+            mental_model = self._generate_mental_model_with_llm(
+                patches, changes, additional_context
+            )
+
         # Create result
         dependency_order = [p.id for p in patches]
 
@@ -259,7 +267,8 @@ class CodeSplitterAgent:
                 'num_dependencies': len(dependencies),
                 'metrics': metrics,
                 'llm_used': self.use_llm,
-            }
+            },
+            mental_model=mental_model
         )
 
         return result
@@ -459,6 +468,151 @@ class CodeSplitterAgent:
 
         return "\n".join(summary_lines)
 
+    def _generate_mental_model_with_llm(
+        self,
+        patches: List[Patch],
+        changes: List[Change],
+        additional_context: Optional[Dict] = None
+    ) -> Optional[MentalModel]:
+        """Generate a mental model to help reviewers understand the overall changes.
+
+        Args:
+            patches: List of finalized patches
+            changes: List of all changes
+            additional_context: Optional context with commit_message, repository_info, etc.
+
+        Returns:
+            MentalModel if LLM is available, None otherwise
+        """
+        if not self.use_llm or not self.llm_client:
+            return None
+
+        try:
+            # Build context for LLM
+            patch_summaries = []
+            for patch in patches:
+                files = set()
+                for change_id in patch.changes:
+                    for c in changes:
+                        if c.id == change_id:
+                            files.add(c.file)
+                            break
+
+                patch_summaries.append({
+                    "id": patch.id,
+                    "name": patch.name,
+                    "description": patch.description,
+                    "files": list(files),
+                    "num_changes": len(patch.changes),
+                    "size_lines": patch.size_lines,
+                    "depends_on": patch.depends_on
+                })
+
+            # Get aggregate statistics
+            all_files = set(c.file for c in changes)
+            total_added = sum(c.added_lines for c in changes)
+            total_deleted = sum(c.deleted_lines for c in changes)
+
+            # Extract languages from file extensions
+            extensions = set()
+            for f in all_files:
+                ext = os.path.splitext(f)[1].lower()
+                if ext:
+                    extensions.add(ext)
+
+            context = {
+                "num_patches": len(patches),
+                "num_files": len(all_files),
+                "total_added_lines": total_added,
+                "total_deleted_lines": total_deleted,
+                "file_extensions": list(extensions),
+                "patches": patch_summaries,
+                "commit_message": additional_context.get("commit_message") if additional_context else None,
+                "repository_description": additional_context.get("repository_info", {}).get("description") if additional_context else None
+            }
+
+            prompt = f"""You are helping code reviewers understand a large code change that has been split into {len(patches)} smaller, dependency-ordered patches.
+
+Context:
+{json.dumps(context, indent=2)}
+
+Generate a "mental model" to help reviewers understand these changes BEFORE they start reviewing. This should help them:
+1. Understand the overall goal/purpose of all the changes together
+2. See how the patches build on each other (the progression/narrative)
+3. Know what key concepts or domain knowledge will help them review effectively
+4. Get practical tips for reviewing this specific set of changes
+
+Return a JSON object with these fields:
+{{
+  "summary": "1-2 sentence overview of what ALL these changes accomplish together",
+  "progression": ["How patch 0 sets up X", "How patches 1-2 build Y on top", "How patch 3 ties it together"],
+  "key_concepts": ["Concept 1 the reviewer should understand", "Concept 2"],
+  "review_tips": "Practical advice for reviewing these specific changes"
+}}
+
+Guidelines:
+- The summary should explain the HIGH-LEVEL goal, not just list what files change
+- The progression should tell a STORY of how the patches build on each other
+- Key concepts should be SPECIFIC to this code, not generic advice
+- Review tips should be ACTIONABLE for this specific review
+
+Example good mental model:
+{{
+  "summary": "Implements JWT-based authentication system, replacing the deprecated session-based auth with stateless tokens and adding role-based access control.",
+  "progression": [
+    "Patch 0 introduces the JWT token models and signing utilities",
+    "Patches 1-2 add the authentication middleware and integrate it with existing routes",
+    "Patch 3 implements role-based permissions using the new token claims",
+    "Patch 4 adds comprehensive tests for the auth flow"
+  ],
+  "key_concepts": [
+    "JWT tokens are self-contained and validated without database lookups",
+    "The middleware extracts user context from the Authorization header",
+    "Roles are embedded in token claims and checked at route level"
+  ],
+  "review_tips": "Start with the token models in patch 0 to understand the data structure, then trace how tokens flow through the middleware. Pay attention to error handling in edge cases like expired tokens."
+}}
+"""
+
+            messages = [
+                {"role": "system", "content": "You are a code review expert helping reviewers build mental models of complex code changes."},
+                {"role": "user", "content": prompt}
+            ]
+
+            # Try with JSON format first, fallback if it fails
+            response_text = None
+            try:
+                response_text = self.llm_client.chat_completion(
+                    messages=messages,
+                    temperature=0.3,
+                    response_format={"type": "json_object"}
+                )
+            except Exception as json_format_error:
+                # Some models don't support response_format, try without it
+                print(f"  [MentalModel] JSON format not supported, trying without: {json_format_error}")
+                response_text = self.llm_client.chat_completion(
+                    messages=messages,
+                    temperature=0.3
+                )
+
+            from .llm_client import extract_json_from_response
+            response = extract_json_from_response(response_text)
+
+            if isinstance(response, dict):
+                mental_model = MentalModel(
+                    summary=response.get("summary", ""),
+                    progression=response.get("progression", []),
+                    key_concepts=response.get("key_concepts", []),
+                    review_tips=response.get("review_tips", "")
+                )
+                print(f"  Generated mental model for reviewers")
+                return mental_model
+
+        except Exception as e:
+            print(f"  Mental model generation failed: {e}")
+
+        return None
+
     def export_patches_to_files(
         self,
         result: PatchSplitResult,
@@ -616,6 +770,15 @@ class CodeSplitterAgent:
             },
             "patches": patch_metadata
         }
+
+        # Add mental model if available
+        if result.mental_model:
+            metadata["mental_model"] = {
+                "summary": result.mental_model.summary,
+                "progression": result.mental_model.progression,
+                "key_concepts": result.mental_model.key_concepts,
+                "review_tips": result.mental_model.review_tips
+            }
 
         metadata_path = os.path.join(output_dir, f"metadata_{timestamp}.json")
         with open(metadata_path, 'w') as f:
@@ -899,11 +1062,21 @@ Bad description examples (too generic):
                 {"role": "user", "content": prompt}
             ]
 
-            response_text = self.llm_client.chat_completion(
-                messages=messages,
-                temperature=0.3,
-                response_format={"type": "json_object"}
-            )
+            # Try with JSON format first, fallback if it fails
+            response_text = None
+            try:
+                response_text = self.llm_client.chat_completion(
+                    messages=messages,
+                    temperature=0.3,
+                    response_format={"type": "json_object"}
+                )
+            except Exception as json_format_error:
+                # Some models don't support response_format, try without it
+                print(f"  [Annotations] JSON format not supported, trying without: {json_format_error}")
+                response_text = self.llm_client.chat_completion(
+                    messages=messages,
+                    temperature=0.3
+                )
 
             # Import the extraction function
             from .llm_client import extract_json_from_response
@@ -1034,11 +1207,20 @@ Example bad summaries:
                 {"role": "user", "content": prompt}
             ]
 
-            response_text = self.llm_client.chat_completion(
-                messages=messages,
-                temperature=0.3,
-                response_format={"type": "json_object"}
-            )
+            # Try with JSON format first, fallback if it fails
+            response_text = None
+            try:
+                response_text = self.llm_client.chat_completion(
+                    messages=messages,
+                    temperature=0.3,
+                    response_format={"type": "json_object"}
+                )
+            except Exception as json_format_error:
+                # Some models don't support response_format, try without it
+                response_text = self.llm_client.chat_completion(
+                    messages=messages,
+                    temperature=0.3
+                )
 
             from .llm_client import extract_json_from_response
             response = extract_json_from_response(response_text)
@@ -1071,6 +1253,28 @@ Example bad summaries:
             f.write("# Code Changes Summary\n\n")
             f.write(f"**Generated:** {timestamp}\n")
             f.write(f"**Total Patches:** {len(result.patches)}\n\n")
+
+            # Write Mental Model section if available (at the top for reviewers)
+            if result.mental_model:
+                f.write("## Mental Model for Reviewers\n\n")
+                f.write(f"**What this change accomplishes:** {result.mental_model.summary}\n\n")
+
+                if result.mental_model.progression:
+                    f.write("**How patches progress:**\n")
+                    for i, step in enumerate(result.mental_model.progression, 1):
+                        f.write(f"{i}. {step}\n")
+                    f.write("\n")
+
+                if result.mental_model.key_concepts:
+                    f.write("**Key concepts to understand:**\n")
+                    for concept in result.mental_model.key_concepts:
+                        f.write(f"- {concept}\n")
+                    f.write("\n")
+
+                if result.mental_model.review_tips:
+                    f.write(f"**Review tips:** {result.mental_model.review_tips}\n\n")
+
+                f.write("---\n\n")
 
             # Group by category
             by_category = {}

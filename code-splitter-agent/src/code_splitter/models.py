@@ -117,6 +117,21 @@ class Patch:
 
 @dataclass_json
 @dataclass
+class MentalModel:
+    """High-level summary to help reviewers understand the overall changes.
+
+    This provides context for code reviewers to build a mental model of what
+    the changes accomplish, how they progress, and what to focus on during review.
+    """
+
+    summary: str  # 1-2 sentence overview of what all changes accomplish
+    progression: List[str]  # How patches build on each other
+    key_concepts: List[str]  # Domain/codebase context needed for review
+    review_tips: str  # Practical guidance for effective review
+
+
+@dataclass_json
+@dataclass
 class PatchSplitResult:
     """Result of the patch splitting operation."""
 
@@ -126,3 +141,4 @@ class PatchSplitResult:
     semantic_groups: List[SemanticGroup]
     warnings: List[str] = field(default_factory=list)
     metadata: dict = field(default_factory=dict)
+    mental_model: Optional[MentalModel] = None  # High-level summary for reviewers

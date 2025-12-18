@@ -19,8 +19,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Detailed documentation of all phases: Analysis, Graph Construction, Semantic Grouping, Patch Splitting, and Validation
   - Debugging guide for dependency detection issues
   - Extension points documentation for adding language support
+- **code-splitter-agent**: Mental Model generation for reviewers
+  - New `MentalModel` dataclass with summary, progression, key_concepts, and review_tips fields
+  - LLM-powered generation of high-level context to help reviewers understand the overall changes
+  - Mental model includes: what the changes accomplish, how patches build on each other, domain concepts needed for review, and practical review tips
+  - Mental model exported to metadata JSON and summary markdown files
+  - Added `mental_model` field to `PatchSplitResult` for programmatic access
 
 ### Improved
+- **code-splitter-agent**: Better LLM compatibility for non-OpenAI models
+  - Added fallback for models that don't support `response_format: json_object`
+  - Graceful degradation when JSON format parameter is not available
+  - Affects annotation generation, patch summarization, and mental model generation
 - **code-splitter-agent**: Enhanced Go method call detection for chained selector expressions
   - New `get_selector_chain()` helper function to traverse nested selector expressions (e.g., `t.CodeGraph.UpdateNodeMetaData()`)
   - Correctly extracts method usages from struct field chains like `receiver.Field.Method()`
