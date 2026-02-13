@@ -712,6 +712,7 @@ app.get('/api/commits', async (req, res) => {
             goalSummary: metadata.goal_summary,
             repository: metadata.repository,
             state: metadata.state || 'active',
+            mental_model: metadata.mental_model || null,
             patches: (metadata.patches?.map(patch => ({
               id: patch.id,
               name: patch.name,

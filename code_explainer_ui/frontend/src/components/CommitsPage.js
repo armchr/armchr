@@ -33,7 +33,8 @@ import {
   Tab,
   Snackbar,
   Tooltip,
-  Badge
+  Badge,
+  Collapse
 } from '@mui/material';
 import {
   Code as CodeIcon,
@@ -57,7 +58,12 @@ import {
   CallSplit as CallSplitIcon,
   ContentCopy as ContentCopyIcon,
   Settings as SettingsIcon,
-  Refresh as RefreshIcon
+  Refresh as RefreshIcon,
+  Psychology as PsychologyIcon,
+  LightbulbOutlined as LightbulbIcon,
+  TipsAndUpdates as TipsIcon,
+  ArrowForward as ArrowForwardIcon,
+  StarBorder as StarIcon
 } from '@mui/icons-material';
 import ReactMarkdown from 'react-markdown';
 import { fetchCommits, deleteCommit, fetchRepositories, fetchHealth, fetchReviews, fetchReviewById, archiveReview, fetchConfig } from '../services/api';
@@ -67,6 +73,200 @@ import FilePath from './FilePath';
 import { PatchCardSkeleton, ReviewCardSkeleton } from './Skeletons';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
 import { colors } from '../App';
+
+// Mental Model Summary Component - shows in accordion summary
+const MentalModelSummary = ({ mentalModel }) => {
+  if (!mentalModel?.summary) return null;
+
+  const truncatedSummary = mentalModel.summary.length > 150
+    ? mentalModel.summary.substring(0, 150) + '...'
+    : mentalModel.summary;
+
+  return (
+    <Box
+      sx={{
+        mt: 1.5,
+        ml: 4,
+        p: 1.5,
+        backgroundColor: 'rgba(99, 102, 241, 0.04)',
+        borderLeft: `3px solid ${colors.primary.main}`,
+        borderRadius: '0 8px 8px 0',
+      }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+        <LightbulbIcon sx={{ fontSize: 18, color: colors.primary.main, mt: 0.2 }} />
+        <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+          {truncatedSummary}
+        </Typography>
+      </Box>
+    </Box>
+  );
+};
+
+// Mental Model Full Card Component - shows in expanded accordion
+const MentalModelCard = ({ mentalModel }) => {
+  const [expanded, setExpanded] = React.useState(false);
+
+  if (!mentalModel) return null;
+
+  const hasMoreContent = (mentalModel.progression && mentalModel.progression.length > 0) ||
+    (mentalModel.key_concepts && mentalModel.key_concepts.length > 0) ||
+    mentalModel.review_tips;
+
+  return (
+    <Card
+      sx={{
+        mb: 3,
+        backgroundColor: 'rgba(99, 102, 241, 0.03)',
+        border: `1px solid ${colors.border.light}`,
+        borderLeft: `4px solid ${colors.primary.main}`,
+        cursor: hasMoreContent ? 'pointer' : 'default',
+        transition: 'background-color 0.15s ease',
+        '&:hover': hasMoreContent ? {
+          backgroundColor: 'rgba(99, 102, 241, 0.06)',
+        } : {},
+      }}
+      onClick={() => hasMoreContent && setExpanded(!expanded)}
+    >
+      <CardContent sx={{ pb: hasMoreContent ? 1.5 : 2, '&:last-child': { pb: hasMoreContent ? 1.5 : 2 } }}>
+        {/* Header */}
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <PsychologyIcon sx={{ mr: 1.5, color: colors.primary.main, fontSize: 24 }} />
+            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+              Before You Begin
+            </Typography>
+          </Box>
+          {hasMoreContent && (
+            <Box sx={{ display: 'flex', alignItems: 'center', color: colors.text.secondary }}>
+              <Typography variant="body2" sx={{ mr: 0.5 }}>
+                {expanded ? 'Show Less' : 'Show More'}
+              </Typography>
+              <ExpandMoreIcon sx={{
+                transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                transition: 'transform 0.2s',
+                fontSize: 20,
+              }} />
+            </Box>
+          )}
+        </Box>
+
+        {/* Overview - Always visible */}
+        {mentalModel.summary && (
+          <Box sx={{ mb: hasMoreContent ? 2 : 0 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5, color: colors.text.primary }}>
+              What This Change Does
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {mentalModel.summary}
+            </Typography>
+          </Box>
+        )}
+
+        {/* Collapsed Preview - Section headers */}
+        {!expanded && hasMoreContent && (
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, color: colors.text.muted }}>
+            {mentalModel.progression && mentalModel.progression.length > 0 && (
+              <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                How Patches Progress <span style={{ fontWeight: 400 }}>({mentalModel.progression.length} steps)</span>
+              </Typography>
+            )}
+            {mentalModel.key_concepts && mentalModel.key_concepts.length > 0 && (
+              <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                Key Concepts <span style={{ fontWeight: 400 }}>({mentalModel.key_concepts.length})</span>
+              </Typography>
+            )}
+            {mentalModel.review_tips && (
+              <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                Review Tips
+              </Typography>
+            )}
+          </Box>
+        )}
+
+        {/* Collapsible Content */}
+        <Collapse in={expanded}>
+          <Box sx={{ mt: 2 }}>
+            {/* Progression Items */}
+            {mentalModel.progression && mentalModel.progression.length > 0 && (
+              <Box sx={{ mb: 2.5 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, color: colors.text.primary }}>
+                  How Patches Progress
+                </Typography>
+                <Box component="ol" sx={{ m: 0, pl: 2.5 }}>
+                  {mentalModel.progression.map((step, idx) => (
+                    <Box
+                      component="li"
+                      key={idx}
+                      sx={{
+                        mb: 0.75,
+                        '&::marker': { color: colors.primary.main, fontWeight: 600 }
+                      }}
+                    >
+                      <Typography variant="body2" color="text.secondary">
+                        {step}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Box>
+              </Box>
+            )}
+
+            {/* Key Concepts */}
+            {mentalModel.key_concepts && mentalModel.key_concepts.length > 0 && (
+              <Box sx={{ mb: 2.5 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, color: colors.text.primary }}>
+                  Key Concepts
+                </Typography>
+                <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+                  {mentalModel.key_concepts.map((concept, idx) => (
+                    <Box
+                      component="li"
+                      key={idx}
+                      sx={{
+                        mb: 0.5,
+                        '&::marker': { color: colors.secondary.main }
+                      }}
+                    >
+                      <Typography variant="body2" color="text.secondary">
+                        {concept}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Box>
+              </Box>
+            )}
+
+            {/* Review Tips */}
+            {mentalModel.review_tips && (
+              <Box
+                sx={{
+                  p: 1.5,
+                  backgroundColor: 'rgba(16, 185, 129, 0.06)',
+                  borderRadius: 1,
+                  border: `1px solid rgba(16, 185, 129, 0.2)`,
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                  <TipsIcon sx={{ fontSize: 18, color: colors.secondary.main, mt: 0.2 }} />
+                  <Box>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5, color: colors.secondary.dark }}>
+                      Review Tips
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {mentalModel.review_tips}
+                    </Typography>
+                  </Box>
+                </Box>
+              </Box>
+            )}
+          </Box>
+        </Collapse>
+      </CardContent>
+    </Card>
+  );
+};
 
 const CommitsPage = () => {
   const navigate = useNavigate();
@@ -697,10 +897,10 @@ const CommitsPage = () => {
       const commitsData = await fetchCommits();
       setCommits(commitsData);
 
-      // Navigate to the new patch detail view
+      // Navigate to the new patch detail view with state to trigger mental model dialog
       if (commitId) {
-        // Get the first patch (00) of the newly split commit
-        navigate(`/patch/${commitId}/00`);
+        // Get the first patch (0) of the newly split commit
+        navigate(`/patch/${commitId}/0`, { state: { fromSplit: true } });
       }
     } catch (err) {
       console.error('Error loading new split:', err);
@@ -874,21 +1074,46 @@ const CommitsPage = () => {
                 </Box>
               )}
             </Box>
-            <IconButton
-              onClick={handleMenuClick}
-              sx={{
-                color: colors.text.secondary,
-                border: `1px solid ${colors.border.light}`,
-                borderRadius: 2,
-                '&:hover': {
-                  backgroundColor: colors.background.subtle,
-                  color: colors.primary.main,
-                  borderColor: colors.primary.light,
-                }
-              }}
-            >
-              <MenuIcon />
-            </IconButton>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<StarIcon />}
+                endIcon={<GitHubIcon sx={{ fontSize: 16 }} />}
+                href="https://github.com/armchr/armchr"
+                target="_blank"
+                rel="noopener noreferrer"
+                sx={{
+                  textTransform: 'none',
+                  borderColor: colors.border.main,
+                  color: colors.text.secondary,
+                  fontSize: '0.8rem',
+                  py: 0.75,
+                  '&:hover': {
+                    borderColor: colors.primary.main,
+                    backgroundColor: 'rgba(99, 102, 241, 0.04)',
+                    color: colors.primary.main,
+                  }
+                }}
+              >
+                Star on GitHub
+              </Button>
+              <IconButton
+                onClick={handleMenuClick}
+                sx={{
+                  color: colors.text.secondary,
+                  border: `1px solid ${colors.border.light}`,
+                  borderRadius: 2,
+                  '&:hover': {
+                    backgroundColor: colors.background.subtle,
+                    color: colors.primary.main,
+                    borderColor: colors.primary.light,
+                  }
+                }}
+              >
+                <MenuIcon />
+              </IconButton>
+            </Box>
           </Box>
 
           {/* Menu */}
@@ -1207,6 +1432,9 @@ const CommitsPage = () => {
                         </Typography>
                       )}
                     </Box>
+
+                    {/* Mental Model Summary Preview */}
+                    <MentalModelSummary mentalModel={commit.metadata?.mental_model} />
                   </Box>
 
                   {/* Right side: Statistics stacked vertically */}
@@ -1253,10 +1481,13 @@ const CommitsPage = () => {
               </AccordionSummary>
               
               <AccordionDetails sx={{ backgroundColor: colors.background.paper }}>
+                {/* Full Mental Model Card */}
+                <MentalModelCard mentalModel={commit.metadata?.mental_model} />
+
                 <Typography variant="h6" gutterBottom sx={{ mb: 3 }}>
-                  Patch Details ({commit.metadata?.patches?.length || 0})
+                  Patch Details ({commit.metadata?.patches?.filter(p => p.state !== 'deleted').length || 0})
                 </Typography>
-                
+
                 {commit.metadata?.patches?.length > 0 ? (
                   <Grid container spacing={2}>
                     {commit.metadata.patches.map((patch) => (

@@ -135,6 +135,7 @@ Each patch includes:
 
 ### Advanced Features
 - **LLM enhancement** (optional): Uses AI to improve semantic understanding and naming
+- **Mental model generation** (LLM): Generates a high-level reviewer guide with summary, patch progression, key concepts, and review tips
 - **Monorepo support**: Filters changes to specific subdirectories
 - **Untracked files**: Optionally includes new files in analysis
 - **Quality metrics**: Measures patch balance, reviewability, and complexity
@@ -420,6 +421,13 @@ agent.export_patches_to_files(
     repository_info={'name': 'myproject'}
 )
 
+# Access mental model (LLM-only)
+if result.mental_model:
+    print(f"\nMental Model:")
+    print(f"  Summary: {result.mental_model.summary}")
+    for step in result.mental_model.progression:
+        print(f"  - {step}")
+
 # Access quality metrics
 print(f"\nQuality Metrics:")
 print(f"  Balance score: {result.metadata['metrics']['balance_score']:.2f}")
@@ -481,6 +489,7 @@ The splitter operates through five sequential phases:
 │  PHASE 5: Validation & Optimization                 │
 │  • Validate patch correctness                       │
 │  • Measure quality metrics                          │
+│  • [LLM] Generate mental model for reviewers        │
 │  • [LLM] Final validation and suggestions           │
 └───────────────────┬─────────────────────────────────┘
                     │
@@ -548,11 +557,12 @@ The splitter operates through five sequential phases:
 
 #### 8. LLMClient (`llm_client.py`) [Optional]
 - OpenAI-compatible API integration
-- Enhances analysis at 4 points:
+- Enhances analysis at 5 points:
   1. **Dependency validation**: Find missing dependencies
   2. **Semantic grouping**: Identify logical boundaries
   3. **Patch naming**: Generate meaningful descriptions
-  4. **Final validation**: Check correctness
+  4. **Mental model generation**: Create a reviewer guide with summary, progression narrative, key concepts, and review tips
+  5. **Final validation**: Check correctness
 
 ### Dependency Constraints
 
@@ -615,6 +625,25 @@ Patch(
     depends_on=[],  # Patch IDs this depends on
     size_lines=150,
     warnings=[]
+)
+```
+
+**MentalModel**: High-level reviewer guide (LLM-generated)
+```python
+MentalModel(
+    summary="Implements JWT-based auth, replacing session-based auth with stateless tokens.",
+    progression=[
+        "Patch 0 introduces JWT token models and signing utilities",
+        "Patches 1-2 add auth middleware and integrate with routes",
+        "Patch 3 implements role-based permissions",
+        "Patch 4 adds comprehensive tests"
+    ],
+    key_concepts=[
+        "JWT tokens are self-contained and validated without DB lookups",
+        "Middleware extracts user context from the Authorization header",
+        "Roles are embedded in token claims and checked at route level"
+    ],
+    review_tips="Start with the token models in patch 0, then trace how tokens flow through the middleware."
 )
 ```
 
@@ -691,19 +720,47 @@ Complete information about the split:
       "filename": "00_Add_database_models.patch",
       "annotations": []
     }
-  ]
+  ],
+  "mental_model": {
+    "summary": "Adds user authentication and API endpoints with database models.",
+    "progression": [
+      "Patch 0 creates the database models",
+      "Patch 1 implements authentication middleware",
+      "Patches 2-3 add API endpoints and tests"
+    ],
+    "key_concepts": [
+      "User and Session models define the auth data layer",
+      "JWT tokens are used for stateless authentication"
+    ],
+    "review_tips": "Start with the models to understand the data structure, then follow the auth flow."
+  }
 }
 ```
 
 ### Summary Markdown
 
-Human-readable overview:
+Human-readable overview including a mental model section (when LLM is enabled):
 
 ```markdown
 # Code Changes Summary
 
 **Generated:** 2025-01-30 14:30:22
 **Total Patches:** 4
+
+## Mental Model for Reviewers
+
+**What this change accomplishes:** Adds user authentication and API endpoints with database models.
+
+**How patches progress:**
+1. Patch 0 creates the database models
+2. Patch 1 implements authentication middleware
+3. Patches 2-3 add API endpoints and tests
+
+**Key concepts to understand:**
+- User and Session models define the auth data layer
+- JWT tokens are used for stateless authentication
+
+**Review tips:** Start with the models to understand the data structure, then follow the auth flow.
 
 ## Patches by Category
 
