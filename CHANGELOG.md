@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Docker**: Updated Dockerfile for monorepo structure
+  - Splitter source path updated from `splitter_dep/` to `code-splitter-agent/`
+  - Removed code_reviewer build stage (no longer bundled in this image)
+  - Simplified startup command to match production entrypoint pattern
+  - Removed config directory mount and `CONFIG_PATH`/`source.yaml` references
+- **Makefile**: Aligned local Docker workflow with production (`scripts/armchair.sh`)
+  - Replaced `CONFIG_DIR`/`OUTPUT_DIR` with `ARMCHAIR_ROOT` (defaults to `$HOME`) and `ARMCHAIR_OUTPUT` (defaults to `~/.armchair_output`)
+  - `docker-run` now mirrors production: mounts workspace read-only, uses `--root-map`/`--root-dir` flags
+  - Removed `docker-validate` and `docker-run-custom` targets
+  - Auto-creates `ARMCHAIR_OUTPUT` directory on `docker-run`
+
 ### Added
 - **code_explainer_ui**: Added complete frontend and backend source code to the repository
   - React frontend with Material-UI for the Armchair dashboard

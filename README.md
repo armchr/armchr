@@ -442,11 +442,29 @@ docker rm armchair-dashboard        # Remove
 
 ## Development
 
-For local development, building from source, or contributing to Armchair, see the **[code_explainer_ui README](code_explainer_ui/README.md)**. It contains:
+### Building and Running Locally with Docker
 
-- Full architecture documentation (React frontend, Express.js backend, AI agents)
-- Local development setup with Make commands
-- Environment variables and configuration details
-- API endpoint reference
-- MCP server mode documentation
-- Project structure and key technologies
+Build the Docker image locally and run it using the same pattern as production:
+
+```bash
+# Build for local platform
+make docker-build
+
+# Build for multiple platforms (amd64 + arm64)
+make docker-build-multi
+
+# Run locally (defaults: ARMCHAIR_ROOT=$HOME, ARMCHAIR_OUTPUT=~/.armchair_output)
+make docker-run
+
+# Run with custom paths
+make docker-run ARMCHAIR_ROOT=/Users/me/src ARMCHAIR_OUTPUT=/Users/me/.armchair_output
+```
+
+Run `make help` to see all available targets and current configuration.
+
+### Component Documentation
+
+For detailed documentation on individual components, see:
+
+- **[code_explainer_ui README](code_explainer_ui/README.md)**: Full architecture documentation (React frontend, Express.js backend, AI agents), local development setup, environment variables, API endpoint reference, MCP server mode, and project structure
+- **[Code Splitter Agent README](code-splitter-agent/README.md)**: Standalone splitter usage, pipeline architecture, and language support
