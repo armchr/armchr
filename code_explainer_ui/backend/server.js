@@ -2664,12 +2664,14 @@ async function performGitHubSplit(owner, repo, number) {
   console.log(`GitHub Split: Wrote PR diff to: ${tempPatchFile} (${diffContent.length} bytes)`);
 
   // Construct the splitter command
+  // For GitHub PRs we already have the diff in the patch file,
+  // so we don't pass --source-config/--repo (which would try to
+  // resolve a local git path from source.yaml).
   const commandArgs = [
     '-m', 'code_splitter.main',
     'split',
     '--output-dir', outputPath,
     '--source-config', SOURCE_CONFIG_PATH,
-    '--repo', `${owner}/${repo}`,
     '--patch', tempPatchFile,
     '--annotate-patches'
   ];
