@@ -52,6 +52,7 @@ import {
   Article as ArticleIcon,
   Gavel as GavelIcon,
   GitHub as GitHubIcon,
+  VpnKey as VpnKeyIcon,
   Close as CloseIcon,
   Archive as ArchiveIcon,
   RateReview as RateReviewIcon,
@@ -443,6 +444,10 @@ const CommitsPage = () => {
         url = '/assets/LICENSE';
         title = 'License';
         contentType = 'text';
+      } else if (type === 'github-pat-guide') {
+        url = '/assets/github-pat-guide.md';
+        title = 'GitHub Token Setup Guide';
+        contentType = 'markdown';
       }
 
       const response = await fetch(url);
@@ -1169,6 +1174,12 @@ const CommitsPage = () => {
               </ListItemIcon>
               <ListItemText>GitHub Repository</ListItemText>
             </MenuItem>
+            <MenuItem onClick={() => handleMenuItemClick('github-pat-guide')}>
+              <ListItemIcon>
+                <VpnKeyIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText>GitHub Token Guide</ListItemText>
+            </MenuItem>
             <MenuItem onClick={() => handleMenuItemClick('readme')}>
               <ListItemIcon>
                 <ArticleIcon fontSize="small" />
@@ -1236,7 +1247,7 @@ const CommitsPage = () => {
                   '& li': { marginBottom: 0.5 }
                 }}>
                   {contentDialogType === 'markdown' ? (
-                    <ReactMarkdown>{contentDialogContent}</ReactMarkdown>
+                    <ReactMarkdown components={{ a: ({ node, ...props }) => <a {...props} target="_blank" rel="noopener noreferrer" /> }}>{contentDialogContent}</ReactMarkdown>
                   ) : (
                     <Typography component="pre" sx={{
                       whiteSpace: 'pre-wrap',
@@ -1990,6 +2001,10 @@ const CommitsPage = () => {
           <SettingsDialog
             open={settingsDialogOpen}
             onClose={() => setSettingsDialogOpen(false)}
+            onOpenGitHubGuide={() => {
+              setSettingsDialogOpen(false);
+              handleMenuItemClick('github-pat-guide');
+            }}
           />
         </Container>
       </Box>

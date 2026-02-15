@@ -2872,6 +2872,31 @@ app.get('/api/github/status', async (req, res) => {
   }
 });
 
+// POST /api/github/validate-pat — validate a PAT before saving
+app.post('/api/github/validate-pat', async (req, res) => {
+  try {
+    const { pat } = req.body;
+    if (!pat) {
+      return res.json({ connected: false, error: 'No token provided' });
+    }
+
+    try {
+      const user = await validatePat(pat);
+      res.json({
+        connected: true,
+        login: user.login,
+        name: user.name,
+        scopes: user.scopes
+      });
+    } catch (err) {
+      res.json({ connected: false, error: err.message });
+    }
+  } catch (error) {
+    console.error('Error validating PAT:', error);
+    res.status(500).json({ error: 'Failed to validate token' });
+  }
+});
+
 // GET /api/github/pulls — list open PRs across all connected repos
 app.get('/api/github/pulls', async (req, res) => {
   try {

@@ -457,9 +457,13 @@ export const analyzeGitHubPrUrl = async (url) => {
   }
 };
 
-export const validateGitHubPat = async () => {
+export const validateGitHubPat = async (pat) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/github/status`);
+    const response = await fetch(`${API_BASE_URL}/github/validate-pat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pat })
+    });
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }

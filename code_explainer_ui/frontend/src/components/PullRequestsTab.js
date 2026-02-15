@@ -342,9 +342,14 @@ const PullRequestsTab = ({ githubConnected, githubRepos, onSplitComplete, onOpen
                       </Box>
 
                       <Box sx={{ display: 'flex', gap: 1.5, ml: 4 }}>
+                        {pr.commits > 0 && (
+                          <Typography variant="caption" color="text.secondary">
+                            {pr.commits} commit{pr.commits !== 1 ? 's' : ''}
+                          </Typography>
+                        )}
                         <Typography variant="caption" color="text.secondary">
                           <DescriptionIcon sx={{ fontSize: 14, mr: 0.3, verticalAlign: 'middle' }} />
-                          {pr.changed_files} files
+                          {pr.changed_files} file{pr.changed_files !== 1 ? 's' : ''}
                         </Typography>
                         <Typography variant="caption" sx={{ color: '#238636' }}>
                           +{pr.additions}

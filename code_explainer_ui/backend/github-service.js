@@ -111,27 +111,48 @@ export async function listPullRequests(owner, repo, pat, params = {}) {
     pat
   );
 
-  return prs.map(pr => ({
-    number: pr.number,
-    title: pr.title,
-    state: pr.state,
-    url: pr.html_url,
-    author: pr.user?.login || 'unknown',
-    author_avatar: pr.user?.avatar_url || null,
-    created_at: pr.created_at,
-    updated_at: pr.updated_at,
-    base_branch: pr.base?.ref || null,
-    head_branch: pr.head?.ref || null,
-    head_sha: pr.head?.sha || null,
-    draft: pr.draft || false,
-    additions: pr.additions || 0,
-    deletions: pr.deletions || 0,
-    changed_files: pr.changed_files || 0,
-    labels: (pr.labels || []).map(l => ({ name: l.name, color: l.color })),
-    mergeable: pr.mergeable,
-    owner,
-    repo
+  // The list endpoint doesn't include additions/deletions/changed_files,
+  // so fetch each PR's details in parallel to get those stats.
+  const enriched = await Promise.all(prs.map(async (pr) => {
+    let additions = 0, deletions = 0, changed_files = 0, commits = 0;
+    try {
+      const detail = await githubApiFetch(
+        `/repos/${owner}/${repo}/pulls/${pr.number}`,
+        pat
+      );
+      additions = detail.additions || 0;
+      deletions = detail.deletions || 0;
+      changed_files = detail.changed_files || 0;
+      commits = detail.commits || 0;
+    } catch (_) {
+      // If detail fetch fails, leave stats at 0
+    }
+
+    return {
+      number: pr.number,
+      title: pr.title,
+      state: pr.state,
+      url: pr.html_url,
+      author: pr.user?.login || 'unknown',
+      author_avatar: pr.user?.avatar_url || null,
+      created_at: pr.created_at,
+      updated_at: pr.updated_at,
+      base_branch: pr.base?.ref || null,
+      head_branch: pr.head?.ref || null,
+      head_sha: pr.head?.sha || null,
+      draft: pr.draft || false,
+      additions,
+      deletions,
+      changed_files,
+      commits,
+      labels: (pr.labels || []).map(l => ({ name: l.name, color: l.color })),
+      mergeable: pr.mergeable,
+      owner,
+      repo
+    };
   }));
+
+  return enriched;
 }
 
 /**

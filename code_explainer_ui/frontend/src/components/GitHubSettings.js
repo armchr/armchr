@@ -6,22 +6,21 @@ import {
   Button,
   CircularProgress,
   Alert,
-  Chip,
   IconButton
 } from '@mui/material';
 import {
   CheckCircle as CheckCircleIcon,
   Delete as DeleteIcon,
   Add as AddIcon,
-  GitHub as GitHubIcon
+  GitHub as GitHubIcon,
+  HelpOutline as HelpOutlineIcon
 } from '@mui/icons-material';
-import { fetchGitHubStatus } from '../services/api';
+import { validateGitHubPat } from '../services/api';
 import { colors } from '../App';
 
-const GitHubSettings = ({ pat, onPatChange, repos, onReposChange }) => {
+const GitHubSettings = ({ pat, onPatChange, repos, onReposChange, onOpenGuide }) => {
   const [verifying, setVerifying] = useState(false);
   const [verifyResult, setVerifyResult] = useState(null);
-  const [detectedRemotes, setDetectedRemotes] = useState([]);
   const [newRepo, setNewRepo] = useState('');
 
   // Verify PAT on load if set
@@ -35,12 +34,11 @@ const GitHubSettings = ({ pat, onPatChange, repos, onReposChange }) => {
     setVerifying(true);
     setVerifyResult(null);
     try {
-      const status = await fetchGitHubStatus();
-      if (status.connected) {
-        setVerifyResult({ success: true, login: status.login, name: status.name });
-        setDetectedRemotes(status.detectedRemotes || []);
+      const result = await validateGitHubPat(pat);
+      if (result.connected) {
+        setVerifyResult({ success: true, login: result.login, name: result.name });
       } else {
-        setVerifyResult({ success: false, error: status.error || 'Token validation failed' });
+        setVerifyResult({ success: false, error: result.error || 'Token validation failed' });
       }
     } catch (err) {
       setVerifyResult({ success: false, error: err.message });
@@ -49,30 +47,19 @@ const GitHubSettings = ({ pat, onPatChange, repos, onReposChange }) => {
     }
   };
 
-  const handleAddRepo = (repoSlug) => {
-    if (!repoSlug || repos.includes(repoSlug)) return;
-    onReposChange([...repos, repoSlug]);
+  const handleAddRepo = () => {
+    const slug = newRepo.trim();
+    if (!slug || repos.includes(slug)) return;
+    // Validate format: owner/repo
+    if (!/^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/.test(slug)) {
+      return;
+    }
+    onReposChange([...repos, slug]);
     setNewRepo('');
   };
 
   const handleRemoveRepo = (repoSlug) => {
     onReposChange(repos.filter(r => r !== repoSlug));
-  };
-
-  const handleAddManualRepo = () => {
-    const slug = newRepo.trim();
-    if (!slug) return;
-    // Validate format: owner/repo
-    if (!/^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/.test(slug)) {
-      return;
-    }
-    handleAddRepo(slug);
-  };
-
-  const handleNewRepoKeyPress = (e) => {
-    if (e.key === 'Enter') {
-      handleAddManualRepo();
-    }
   };
 
   return (
@@ -85,7 +72,28 @@ const GitHubSettings = ({ pat, onPatChange, repos, onReposChange }) => {
           value={pat}
           onChange={(e) => { onPatChange(e.target.value); setVerifyResult(null); }}
           fullWidth
-          helperText="Token needs 'repo' scope for private repos. Create at github.com/settings/tokens"
+          helperText={
+            <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              Token needs 'repo' scope for private repos.
+              {onOpenGuide && (
+                <Box
+                  component="span"
+                  onClick={onOpenGuide}
+                  sx={{
+                    color: colors.primary.main,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 0.25,
+                    '&:hover': { textDecoration: 'underline' }
+                  }}
+                >
+                  <HelpOutlineIcon sx={{ fontSize: 14 }} />
+                  Setup guide
+                </Box>
+              )}
+            </Box>
+          }
           placeholder="ghp_..."
         />
         <Button
@@ -112,54 +120,28 @@ const GitHubSettings = ({ pat, onPatChange, repos, onReposChange }) => {
         </Alert>
       )}
 
-      {/* Detected Remotes */}
-      {detectedRemotes.length > 0 && (
-        <Box>
-          <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
-            Detected GitHub Remotes
-          </Typography>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-            {detectedRemotes.map(remote => {
-              const slug = `${remote.owner}/${remote.repo}`;
-              const alreadyAdded = repos.includes(slug);
-              return (
-                <Chip
-                  key={slug}
-                  label={slug}
-                  icon={<GitHubIcon sx={{ fontSize: 16 }} />}
-                  onClick={alreadyAdded ? undefined : () => handleAddRepo(slug)}
-                  onDelete={alreadyAdded ? undefined : () => handleAddRepo(slug)}
-                  deleteIcon={alreadyAdded ? <CheckCircleIcon /> : <AddIcon />}
-                  variant={alreadyAdded ? 'filled' : 'outlined'}
-                  color={alreadyAdded ? 'primary' : 'default'}
-                  sx={{ cursor: alreadyAdded ? 'default' : 'pointer' }}
-                />
-              );
-            })}
-          </Box>
-        </Box>
-      )}
-
-      {/* Manual Repo Input */}
+      {/* GitHub Repos to fetch PRs from */}
       <Box>
-        <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
-          Connected Repositories
+        <Typography variant="subtitle2" sx={{ mb: 0.5, fontWeight: 600 }}>
+          Repositories to Watch
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+          Add GitHub repositories to browse their pull requests in the Pull Requests tab.
         </Typography>
         <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
           <TextField
             size="small"
-            placeholder="owner/repo"
+            placeholder="owner/repo (e.g. facebook/react)"
             value={newRepo}
             onChange={(e) => setNewRepo(e.target.value)}
-            onKeyPress={handleNewRepoKeyPress}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleAddRepo(); }}
             sx={{ flexGrow: 1 }}
-            helperText="Add a GitHub repository (e.g., facebook/react)"
           />
           <Button
             variant="outlined"
             size="small"
             startIcon={<AddIcon />}
-            onClick={handleAddManualRepo}
+            onClick={handleAddRepo}
             disabled={!newRepo.trim()}
             sx={{ mt: 0, height: 40 }}
           >
@@ -169,8 +151,8 @@ const GitHubSettings = ({ pat, onPatChange, repos, onReposChange }) => {
 
         {/* Repos List */}
         {repos.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            No repositories connected. Add one above or click a detected remote.
+          <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+            No repositories added yet.
           </Typography>
         ) : (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>

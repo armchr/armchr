@@ -33,7 +33,7 @@ import { fetchConfig, updateConfig } from '../services/api';
 import GitHubSettings from './GitHubSettings';
 import { colors } from '../App';
 
-const SettingsDialog = ({ open, onClose }) => {
+const SettingsDialog = ({ open, onClose, onOpenGitHubGuide }) => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -319,6 +319,7 @@ chmod +x armchair.sh
                   onPatChange={setGithubPat}
                   repos={githubRepos}
                   onReposChange={setGithubRepos}
+                  onOpenGuide={onOpenGitHubGuide}
                 />
               </AccordionDetails>
             </Accordion>
