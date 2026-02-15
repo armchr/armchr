@@ -992,18 +992,31 @@ Areas for improvement:
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/code-splitter-agent.git
-cd code-splitter-agent
+git clone https://github.com/armchr/armchr.git
+cd armchr/code-splitter-agent
 
 # Install with dev dependencies
 make install-dev
 
 # Run tests
 make test
-
-# Run linting
-make lint
 ```
+
+### Makefile Targets
+
+| Target | Description |
+|--------|-------------|
+| `make setup` | Create venv and install all dependencies |
+| `make install` | Install package in current environment |
+| `make install-dev` | Install with dev dependencies (pytest, black, mypy) |
+| `make test` | Run tests with pytest |
+| `make run-example` | Run `example.py` |
+| `make clean` | Clean build artifacts (pyc, egg-info, pycache) |
+| `make clean-all` | Clean everything including venv |
+| `make build` | Build Docker image |
+| `make docker-run` | Run Docker container |
+| `make docker-shell` | Start interactive Docker shell |
+| `make help` | Show all available commands |
 
 ---
 
@@ -1025,9 +1038,8 @@ Built with:
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/yourusername/code-splitter-agent/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/code-splitter-agent/discussions)
-- **Documentation**: [docs/](docs/)
+- **Issues**: [GitHub Issues](https://github.com/armchr/armchr/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/armchr/armchr/discussions)
 
 ---
 

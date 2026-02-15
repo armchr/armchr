@@ -10,6 +10,19 @@ import { exec, execFile, spawn } from 'child_process';
 import { promisify } from 'util';
 import { fileURLToPath } from 'url';
 import ArmchairMCPServer from './mcp-server.mjs';
+import {
+  githubApiFetch,
+  validatePat,
+  listPullRequests,
+  getPullRequest,
+  getPullRequestDiff,
+  detectGitHubRemotes,
+  parsePrUrl,
+  formatPrComment,
+  postOrUpdatePrComment,
+  checkPushAccess,
+  getPrMergeBase
+} from './github-service.js';
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -182,6 +195,8 @@ function loadArmchairConfig() {
       if (armchairConfig.CACHE_REFRESH_INTERVAL_MS) {
         process.env.CACHE_REFRESH_INTERVAL_MS = armchairConfig.CACHE_REFRESH_INTERVAL_MS.toString();
       }
+      // GitHub integration config is stored in armchairConfig but not set as env vars
+      // Accessed directly via armchairConfig.GITHUB_PAT and armchairConfig.GITHUB_REPOS
 
       console.log('Environment variables updated from .armchair.json');
     } else {
@@ -563,7 +578,9 @@ app.get('/api/config', (req, res) => {
       sourceConfigPath: SOURCE_CONFIG_PATH,
       configFileExists,
       sourceConfigExists,
-      rootDir: ROOT_DIR || null
+      rootDir: ROOT_DIR || null,
+      GITHUB_PAT_SET: !!armchairConfig.GITHUB_PAT,
+      GITHUB_REPOS: armchairConfig.GITHUB_REPOS || []
     });
   } catch (error) {
     console.error('Error getting config:', error);
@@ -577,13 +594,13 @@ app.get('/api/config', (req, res) => {
 // Update configuration
 app.put('/api/config', (req, res) => {
   try {
-    const { config: newConfig, repositories: newRepositories } = req.body;
+    const { config: newConfig, repositories: newRepositories, GITHUB_PAT, GITHUB_REPOS } = req.body;
 
     let configSaved = true;
     let repositoriesSaved = true;
 
     // Update .armchair.json if config is provided
-    if (newConfig) {
+    if (newConfig || GITHUB_PAT !== undefined || GITHUB_REPOS !== undefined) {
       // Validate that only allowed fields are being set (LLM-related only)
       const allowedFields = [
         'ARMCHAIR_MODEL_API_KEY',
@@ -591,11 +608,22 @@ app.put('/api/config', (req, res) => {
         'ARMCHAIR_MODEL_NAME'
       ];
 
-      const configToSave = {};
-      for (const field of allowedFields) {
-        if (newConfig[field] !== undefined) {
-          configToSave[field] = newConfig[field];
+      // Start with existing config to preserve GitHub fields
+      const configToSave = { ...armchairConfig };
+      if (newConfig) {
+        for (const field of allowedFields) {
+          if (newConfig[field] !== undefined) {
+            configToSave[field] = newConfig[field];
+          }
         }
+      }
+
+      // Handle GitHub integration fields
+      if (GITHUB_PAT !== undefined) {
+        configToSave.GITHUB_PAT = GITHUB_PAT;
+      }
+      if (GITHUB_REPOS !== undefined) {
+        configToSave.GITHUB_REPOS = GITHUB_REPOS;
       }
 
       // Save to file and update env vars
@@ -1861,7 +1889,7 @@ app.post('/api/split', async (req, res) => {
         try {
           const commitDirs = await fs.readdir(outputPath);
           const sortedDirs = commitDirs
-            .filter(dir => dir.startsWith('commit_') || dir.startsWith('patch_'))
+            .filter(dir => dir.startsWith('commit_') || dir.startsWith('patch_') || dir.startsWith('pr_'))
             .sort()
             .reverse();
 
@@ -2600,6 +2628,715 @@ app.post('/api/apply', async (req, res) => {
   } catch (error) {
     console.error('Error applying patch:', error);
     res.status(500).json({ error: 'Failed to apply patch', details: error.message });
+  }
+});
+
+// ==========================================
+// GitHub Integration Endpoints
+// ==========================================
+
+/**
+ * Shared helper: perform a GitHub PR split.
+ * Fetches the PR diff, writes it to a temp file, spawns the splitter,
+ * and renames the output directory with pr_ prefix.
+ */
+async function performGitHubSplit(owner, repo, number) {
+  const pat = armchairConfig.GITHUB_PAT;
+  if (!pat) {
+    throw new Error('GitHub PAT not configured. Add it in Settings > GitHub Integration.');
+  }
+
+  // Fetch PR details and diff
+  const prDetails = await getPullRequest(owner, repo, number, pat);
+  const diffContent = await getPullRequestDiff(owner, repo, number, pat);
+
+  if (!diffContent || diffContent.trim().length === 0) {
+    throw new Error('PR has no diff content (empty PR or no changes)');
+  }
+
+  const outputPath = argv.output;
+  const tempDir = path.join(outputPath, 'temp');
+  await fs.ensureDir(tempDir);
+
+  const timestamp = Date.now();
+  const tempPatchFile = path.join(tempDir, `pr_${owner}_${repo}_${number}_${timestamp}.patch`);
+  await fs.writeFile(tempPatchFile, diffContent, 'utf8');
+  console.log(`GitHub Split: Wrote PR diff to: ${tempPatchFile} (${diffContent.length} bytes)`);
+
+  // Construct the splitter command
+  const commandArgs = [
+    '-m', 'code_splitter.main',
+    'split',
+    '--output-dir', outputPath,
+    '--source-config', SOURCE_CONFIG_PATH,
+    '--repo', `${owner}/${repo}`,
+    '--patch', tempPatchFile,
+    '--annotate-patches'
+  ];
+
+  // Add LLM configuration
+  const apiKey = process.env.ARMCHAIR_MODEL_API_KEY;
+  if (apiKey) {
+    commandArgs.push('--api-key', apiKey);
+  } else {
+    commandArgs.push('--no-llm');
+  }
+
+  const apiBase = process.env.ARMCHAIR_MODEL_API_BASE_URL;
+  if (apiBase) {
+    commandArgs.push('--api-base', apiBase);
+  }
+
+  const modelName = process.env.ARMCHAIR_MODEL_NAME;
+  if (modelName) {
+    commandArgs.push('--model', modelName);
+  }
+
+  // Use venv Python interpreter by default, fall back to system Python
+  const defaultPythonPath = path.join(__dirname, '../../splitter_dep/venv/bin/python3');
+  const pythonPath = process.env.PYTHON_PATH || (await fs.pathExists(defaultPythonPath) ? defaultPythonPath : 'python3');
+
+  console.log(`GitHub Split: Executing splitter for PR #${number} from ${owner}/${repo}`);
+
+  return new Promise((resolve, reject) => {
+    const splitterProcess = spawn(pythonPath, commandArgs, {
+      env: process.env,
+      shell: false
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    splitterProcess.stdout.on('data', (data) => {
+      stdout += data.toString();
+      console.log(`[GitHub Splitter stdout]: ${data}`);
+    });
+
+    splitterProcess.stderr.on('data', (data) => {
+      stderr += data.toString();
+      console.error(`[GitHub Splitter stderr]: ${data}`);
+    });
+
+    splitterProcess.on('close', async (code) => {
+      // Clean up temp file
+      try {
+        await fs.remove(tempPatchFile);
+      } catch (e) {
+        console.error(`GitHub Split: Failed to clean up temp file: ${e.message}`);
+      }
+
+      if (code !== 0) {
+        reject(new Error(`Splitter failed with exit code ${code}: ${stderr}`));
+        return;
+      }
+
+      // Extract the generated directory
+      let generatedDir = null;
+      const outputDirMatch = stdout.match(/Output directory:\s*(.+)/);
+      if (outputDirMatch) {
+        generatedDir = path.basename(outputDirMatch[1].trim());
+      }
+
+      // Fallback: find latest output dir
+      if (!generatedDir) {
+        try {
+          const dirs = await fs.readdir(outputPath);
+          const sorted = dirs
+            .filter(dir => dir.startsWith('commit_') || dir.startsWith('patch_'))
+            .sort()
+            .reverse();
+          generatedDir = sorted[0] || null;
+        } catch (e) {
+          console.error('GitHub Split: Error finding output dir:', e);
+        }
+      }
+
+      if (!generatedDir) {
+        reject(new Error('Splitter completed but no output directory found'));
+        return;
+      }
+
+      // Rename to pr_ prefix
+      const prDirName = `pr_${owner}_${repo}_${number}_${timestamp}`;
+      const oldPath = path.join(outputPath, generatedDir);
+      const newPath = path.join(outputPath, prDirName);
+
+      try {
+        await fs.rename(oldPath, newPath);
+        console.log(`GitHub Split: Renamed ${generatedDir} -> ${prDirName}`);
+      } catch (renameErr) {
+        console.error(`GitHub Split: Failed to rename, using original dir: ${renameErr.message}`);
+        resolve({
+          success: true,
+          commitDir: generatedDir,
+          pr: prDetails
+        });
+        return;
+      }
+
+      // Enrich metadata with PR info
+      try {
+        const metadataFiles = (await fs.readdir(newPath)).filter(f => f.startsWith('metadata_') && f.endsWith('.json'));
+        if (metadataFiles.length > 0) {
+          const metaPath = path.join(newPath, metadataFiles[0]);
+          const metadata = await fs.readJson(metaPath);
+          metadata.pr = {
+            owner,
+            repo,
+            number,
+            title: prDetails.title,
+            url: prDetails.url,
+            base_branch: prDetails.base_branch,
+            head_branch: prDetails.head_branch,
+            author: prDetails.author
+          };
+          await fs.writeJson(metaPath, metadata, { spaces: 2 });
+          console.log(`GitHub Split: Enriched metadata with PR info`);
+        }
+      } catch (metaErr) {
+        console.error(`GitHub Split: Failed to enrich metadata: ${metaErr.message}`);
+      }
+
+      resolve({
+        success: true,
+        commitDir: prDirName,
+        pr: prDetails
+      });
+    });
+
+    splitterProcess.on('error', (err) => {
+      reject(new Error(`Failed to start splitter: ${err.message}`));
+    });
+  });
+}
+
+// GET /api/github/status — connection status
+app.get('/api/github/status', async (req, res) => {
+  try {
+    const pat = armchairConfig.GITHUB_PAT;
+    const repos = armchairConfig.GITHUB_REPOS || [];
+
+    if (!pat) {
+      return res.json({
+        connected: false,
+        login: null,
+        repos,
+        detectedRemotes: []
+      });
+    }
+
+    try {
+      const user = await validatePat(pat);
+
+      // Detect GitHub remotes from configured source repositories
+      let detectedRemotes = [];
+      const sourceRepos = config.source?.repositories || [];
+      for (const sourceRepo of sourceRepos) {
+        try {
+          const remotes = await detectGitHubRemotes(execGitCommand, sourceRepo.path);
+          detectedRemotes.push(...remotes);
+        } catch (e) {
+          // Skip repos that fail
+        }
+      }
+
+      // Deduplicate
+      const seen = new Set();
+      detectedRemotes = detectedRemotes.filter(r => {
+        const key = `${r.owner}/${r.repo}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+      res.json({
+        connected: true,
+        login: user.login,
+        name: user.name,
+        avatar_url: user.avatar_url,
+        scopes: user.scopes,
+        repos,
+        detectedRemotes
+      });
+    } catch (err) {
+      res.json({
+        connected: false,
+        error: err.message,
+        repos,
+        detectedRemotes: []
+      });
+    }
+  } catch (error) {
+    console.error('Error checking GitHub status:', error);
+    res.status(500).json({ error: 'Failed to check GitHub status' });
+  }
+});
+
+// GET /api/github/pulls — list open PRs across all connected repos
+app.get('/api/github/pulls', async (req, res) => {
+  try {
+    const pat = armchairConfig.GITHUB_PAT;
+    if (!pat) {
+      return res.status(400).json({ error: 'GitHub PAT not configured' });
+    }
+
+    const repos = armchairConfig.GITHUB_REPOS || [];
+    if (repos.length === 0) {
+      return res.json({ pulls: [], total: 0 });
+    }
+
+    const repoFilter = req.query.repo; // Optional: "owner/repo"
+    const targetRepos = repoFilter
+      ? repos.filter(r => r === repoFilter)
+      : repos;
+
+    const allPulls = [];
+    const errors = [];
+
+    for (const repoSlug of targetRepos) {
+      const [owner, repo] = repoSlug.split('/');
+      if (!owner || !repo) {
+        errors.push(`Invalid repo format: ${repoSlug}`);
+        continue;
+      }
+
+      try {
+        const prs = await listPullRequests(owner, repo, pat);
+        allPulls.push(...prs);
+      } catch (err) {
+        errors.push(`${repoSlug}: ${err.message}`);
+      }
+    }
+
+    // Sort all PRs by updated_at descending
+    allPulls.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+
+    res.json({
+      pulls: allPulls,
+      total: allPulls.length,
+      errors: errors.length > 0 ? errors : undefined
+    });
+  } catch (error) {
+    console.error('Error listing GitHub PRs:', error);
+    res.status(500).json({ error: 'Failed to list pull requests' });
+  }
+});
+
+// GET /api/github/pulls/:owner/:repo/:number — PR details
+app.get('/api/github/pulls/:owner/:repo/:number', async (req, res) => {
+  try {
+    const pat = armchairConfig.GITHUB_PAT;
+    if (!pat) {
+      return res.status(400).json({ error: 'GitHub PAT not configured' });
+    }
+
+    const { owner, repo, number } = req.params;
+    const pr = await getPullRequest(owner, repo, parseInt(number), pat);
+    res.json(pr);
+  } catch (error) {
+    console.error('Error fetching PR details:', error);
+    res.status(error.status || 500).json({ error: error.message });
+  }
+});
+
+// GET /api/github/pulls/:owner/:repo/:number/diff — PR unified diff
+app.get('/api/github/pulls/:owner/:repo/:number/diff', async (req, res) => {
+  try {
+    const pat = armchairConfig.GITHUB_PAT;
+    if (!pat) {
+      return res.status(400).json({ error: 'GitHub PAT not configured' });
+    }
+
+    const { owner, repo, number } = req.params;
+    const diff = await getPullRequestDiff(owner, repo, parseInt(number), pat);
+    res.json({ diff });
+  } catch (error) {
+    console.error('Error fetching PR diff:', error);
+    res.status(error.status || 500).json({ error: error.message });
+  }
+});
+
+// POST /api/github/split — fetch diff, run splitter on PR
+app.post('/api/github/split', async (req, res) => {
+  try {
+    const { owner, repo, number } = req.body;
+    if (!owner || !repo || !number) {
+      return res.status(400).json({ error: 'Missing required fields: owner, repo, number' });
+    }
+
+    const result = await performGitHubSplit(owner, repo, parseInt(number));
+
+    res.json({
+      success: true,
+      message: `Split completed for PR #${number}`,
+      commitDir: result.commitDir,
+      commit_id: result.commitDir,
+      pr: result.pr
+    });
+  } catch (error) {
+    console.error('Error splitting GitHub PR:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/github/review — fetch diff, run reviewer on PR
+app.post('/api/github/review', async (req, res) => {
+  try {
+    const { owner, repo, number } = req.body;
+    if (!owner || !repo || !number) {
+      return res.status(400).json({ error: 'Missing required fields: owner, repo, number' });
+    }
+
+    const pat = armchairConfig.GITHUB_PAT;
+    if (!pat) {
+      return res.status(400).json({ error: 'GitHub PAT not configured' });
+    }
+
+    // Fetch PR diff
+    const diffContent = await getPullRequestDiff(owner, repo, parseInt(number), pat);
+    const prDetails = await getPullRequest(owner, repo, parseInt(number), pat);
+
+    if (!diffContent || diffContent.trim().length === 0) {
+      return res.status(400).json({ error: 'PR has no diff content' });
+    }
+
+    // Write diff to temp file
+    const outputPath = argv.output;
+    const tempDir = path.join(outputPath, 'temp');
+    await fs.ensureDir(tempDir);
+
+    const timestamp = Date.now();
+    const tempPatchFile = path.join(tempDir, `review_pr_${owner}_${repo}_${number}_${timestamp}.patch`);
+    await fs.writeFile(tempPatchFile, diffContent, 'utf8');
+
+    // Spawn the reviewer
+    const reviewerPath = process.env.CODE_REVIEWER_PATH || path.join(__dirname, '../../code_reviewer/code-reviewer');
+    const appConfigPath = process.env.CODE_REVIEWER_APP_CONFIG || path.join(__dirname, '../../code_reviewer/configs/app.yaml');
+
+    const reviewArgs = [
+      '--patch', tempPatchFile,
+      '--source-config', SOURCE_CONFIG_PATH,
+      '--app-config', appConfigPath,
+      '--output-dir', path.join(outputPath, 'reviews')
+    ];
+
+    // Add LLM configuration
+    const apiKey = process.env.ARMCHAIR_MODEL_API_KEY;
+    if (apiKey) {
+      reviewArgs.push('--api-key', apiKey);
+    }
+    const apiBase = process.env.ARMCHAIR_MODEL_API_BASE_URL;
+    if (apiBase) {
+      reviewArgs.push('--api-base', apiBase);
+    }
+    const modelName = process.env.ARMCHAIR_MODEL_NAME;
+    if (modelName) {
+      reviewArgs.push('--model', modelName);
+    }
+
+    console.log(`GitHub Review: Running reviewer for PR #${number} from ${owner}/${repo}`);
+
+    const reviewPromise = new Promise((resolve, reject) => {
+      const reviewProcess = spawn(reviewerPath, reviewArgs, {
+        env: process.env,
+        shell: false
+      });
+
+      let stdout = '';
+      let stderr = '';
+
+      reviewProcess.stdout.on('data', (data) => {
+        stdout += data.toString();
+      });
+
+      reviewProcess.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      reviewProcess.on('close', async (code) => {
+        try { await fs.remove(tempPatchFile); } catch (e) { /* ignore */ }
+        if (code !== 0) {
+          reject(new Error(`Reviewer failed: ${stderr}`));
+        } else {
+          resolve({ stdout, stderr });
+        }
+      });
+
+      reviewProcess.on('error', (err) => {
+        reject(new Error(`Failed to start reviewer: ${err.message}`));
+      });
+    });
+
+    await reviewPromise;
+
+    res.json({
+      success: true,
+      message: `Review completed for PR #${number}`,
+      pr: prDetails
+    });
+  } catch (error) {
+    console.error('Error reviewing GitHub PR:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/github/analyze-url — parse PR URL and split
+app.post('/api/github/analyze-url', async (req, res) => {
+  try {
+    const { url } = req.body;
+    if (!url) {
+      return res.status(400).json({ error: 'Missing required field: url' });
+    }
+
+    const parsed = parsePrUrl(url);
+    if (!parsed) {
+      return res.status(400).json({ error: 'Invalid GitHub PR URL. Expected format: https://github.com/owner/repo/pull/123' });
+    }
+
+    const pat = armchairConfig.GITHUB_PAT;
+    if (!pat) {
+      return res.status(400).json({ error: 'GitHub PAT not configured. Add it in Settings > GitHub Integration.' });
+    }
+
+    const result = await performGitHubSplit(parsed.owner, parsed.repo, parsed.number);
+
+    res.json({
+      success: true,
+      message: `Split completed for PR #${parsed.number}`,
+      commitDir: result.commitDir,
+      commit_id: result.commitDir,
+      pr: result.pr,
+      parsed
+    });
+  } catch (error) {
+    console.error('Error analyzing GitHub PR URL:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/github/pulls/:owner/:repo/:number/comment — post analysis comment
+app.post('/api/github/pulls/:owner/:repo/:number/comment', async (req, res) => {
+  try {
+    const pat = armchairConfig.GITHUB_PAT;
+    if (!pat) {
+      return res.status(400).json({ error: 'GitHub PAT not configured' });
+    }
+
+    const { owner, repo, number } = req.params;
+    const { splitId, includeDescriptions = true, includeReviewTips = true } = req.body;
+
+    if (!splitId) {
+      return res.status(400).json({ error: 'Missing required field: splitId' });
+    }
+
+    // Find and read the split metadata
+    const outputPath = argv.output;
+    const splitDir = path.join(outputPath, splitId);
+
+    if (!await fs.pathExists(splitDir)) {
+      return res.status(404).json({ error: `Split directory not found: ${splitId}` });
+    }
+
+    const files = await fs.readdir(splitDir);
+    const metadataFiles = files.filter(f => f.startsWith('metadata_') && f.endsWith('.json'));
+
+    if (metadataFiles.length === 0) {
+      return res.status(404).json({ error: 'No metadata found in split directory' });
+    }
+
+    const metadata = await fs.readJson(path.join(splitDir, metadataFiles[0]));
+
+    // Format the comment
+    const commentBody = formatPrComment(metadata, { includeDescriptions, includeReviewTips });
+
+    // Post or update the comment
+    const result = await postOrUpdatePrComment(owner, repo, parseInt(number), commentBody, pat);
+
+    res.json({
+      success: true,
+      comment: result,
+      message: result.updated ? 'Comment updated on PR' : 'Comment posted to PR'
+    });
+  } catch (error) {
+    console.error('Error posting PR comment:', error);
+    res.status(error.status || 500).json({ error: error.message });
+  }
+});
+
+// POST /api/github/pulls/:owner/:repo/:number/restack — restack PR with split patches
+app.post('/api/github/pulls/:owner/:repo/:number/restack', async (req, res) => {
+  try {
+    const pat = armchairConfig.GITHUB_PAT;
+    if (!pat) {
+      return res.status(400).json({ error: 'GitHub PAT not configured' });
+    }
+
+    const { owner, repo, number } = req.params;
+    const prNumber = parseInt(number);
+    const { splitId, postComment = false } = req.body;
+
+    if (!splitId) {
+      return res.status(400).json({ error: 'Missing required field: splitId' });
+    }
+
+    // Check push access
+    const hasPush = await checkPushAccess(owner, repo, pat);
+    if (!hasPush) {
+      return res.status(403).json({ error: 'No push access to this repository. You need write permissions to restack.' });
+    }
+
+    // Get PR details
+    const prDetails = await getPullRequest(owner, repo, prNumber, pat);
+
+    // Read split metadata and patch files
+    const outputPath = argv.output;
+    const splitDir = path.join(outputPath, splitId);
+
+    if (!await fs.pathExists(splitDir)) {
+      return res.status(404).json({ error: `Split directory not found: ${splitId}` });
+    }
+
+    const splitFiles = await fs.readdir(splitDir);
+    const metadataFiles = splitFiles.filter(f => f.startsWith('metadata_') && f.endsWith('.json'));
+
+    if (metadataFiles.length === 0) {
+      return res.status(404).json({ error: 'No metadata found in split directory' });
+    }
+
+    const metadata = await fs.readJson(path.join(splitDir, metadataFiles[0]));
+    const patches = metadata.patches || [];
+
+    if (patches.length === 0) {
+      return res.status(400).json({ error: 'No patches found in split' });
+    }
+
+    // Get ordered patch files
+    const patchFiles = patches
+      .sort((a, b) => a.id - b.id)
+      .map(p => ({
+        filename: p.filename,
+        name: p.name,
+        description: p.description,
+        path: path.join(splitDir, p.filename)
+      }))
+      .filter(p => fs.existsSync(p.path));
+
+    if (patchFiles.length === 0) {
+      return res.status(400).json({ error: 'No patch files found on disk' });
+    }
+
+    // Get merge base
+    const mergeBase = await getPrMergeBase(owner, repo, prDetails.base_branch, prDetails.head_branch, pat);
+    if (!mergeBase) {
+      return res.status(500).json({ error: 'Could not determine merge base for this PR' });
+    }
+
+    // Clone the repository to a temp directory
+    const tempCloneDir = path.join('/tmp', `armchair-restack-${Date.now()}`);
+    const cloneUrl = `https://x-access-token:${pat}@github.com/${owner}/${repo}.git`;
+
+    console.log(`Restack: Cloning ${owner}/${repo} to ${tempCloneDir}`);
+
+    try {
+      // Clone
+      await new Promise((resolve, reject) => {
+        const cloneProcess = spawn('git', ['clone', '--no-checkout', cloneUrl, tempCloneDir], { shell: false });
+        let stderr = '';
+        cloneProcess.stderr.on('data', (data) => { stderr += data.toString(); });
+        cloneProcess.on('close', (code) => {
+          if (code !== 0) reject(new Error(`Clone failed: ${stderr}`));
+          else resolve();
+        });
+        cloneProcess.on('error', (err) => reject(err));
+      });
+
+      // Configure git identity
+      await execGitCommand(['config', 'user.email', 'armchair@localhost'], tempCloneDir);
+      await execGitCommand(['config', 'user.name', 'Armchair'], tempCloneDir);
+
+      // Checkout merge base
+      await execGitCommand(['checkout', mergeBase], tempCloneDir);
+
+      // Create backup branch
+      const backupBranch = `${prDetails.head_branch}-pre-restack`;
+      await execGitCommand(['fetch', 'origin', prDetails.head_branch], tempCloneDir);
+      await execGitCommand(['push', 'origin', `origin/${prDetails.head_branch}:refs/heads/${backupBranch}`], tempCloneDir);
+      console.log(`Restack: Created backup branch: ${backupBranch}`);
+
+      // Apply each patch
+      const newCommits = [];
+      for (const pf of patchFiles) {
+        const applyResult = await execGitCommand(['apply', '--check', pf.path], tempCloneDir);
+        if (applyResult === null) {
+          return res.status(400).json({
+            error: `Patch apply failed: ${pf.name}`,
+            details: `The patch "${pf.filename}" could not be applied cleanly. Restack aborted. Backup branch: ${backupBranch}`,
+            backupBranch
+          });
+        }
+
+        await execGitCommand(['apply', pf.path], tempCloneDir);
+        await execGitCommand(['add', '-A'], tempCloneDir);
+
+        const commitMsg = `${pf.name}\n\n${pf.description || ''}`.trim();
+        await execGitCommand(['commit', '-m', commitMsg], tempCloneDir);
+
+        const commitHash = await execGitCommand(['rev-parse', 'HEAD'], tempCloneDir);
+        newCommits.push({
+          hash: commitHash?.trim(),
+          message: pf.name,
+          patchFile: pf.filename
+        });
+
+        console.log(`Restack: Applied and committed: ${pf.name}`);
+      }
+
+      // Force push to the head branch
+      await new Promise((resolve, reject) => {
+        const pushProcess = spawn('git', ['push', '--force', 'origin', `HEAD:refs/heads/${prDetails.head_branch}`], {
+          cwd: tempCloneDir,
+          shell: false
+        });
+        let stderr = '';
+        pushProcess.stderr.on('data', (data) => { stderr += data.toString(); });
+        pushProcess.on('close', (code) => {
+          if (code !== 0) reject(new Error(`Force push failed: ${stderr}`));
+          else resolve();
+        });
+        pushProcess.on('error', (err) => reject(err));
+      });
+
+      console.log(`Restack: Force pushed to ${prDetails.head_branch}`);
+
+      // Optionally post comment
+      let commentResult = null;
+      if (postComment) {
+        try {
+          const commentBody = formatPrComment(metadata, { includeDescriptions: true, includeReviewTips: true });
+          commentResult = await postOrUpdatePrComment(owner, repo, prNumber, commentBody, pat);
+        } catch (commentErr) {
+          console.error(`Restack: Failed to post comment: ${commentErr.message}`);
+        }
+      }
+
+      res.json({
+        success: true,
+        backupBranch,
+        commits: newCommits,
+        commentResult
+      });
+    } finally {
+      // Clean up temp directory
+      try {
+        await fs.remove(tempCloneDir);
+        console.log(`Restack: Cleaned up temp dir: ${tempCloneDir}`);
+      } catch (e) {
+        console.error(`Restack: Failed to clean up: ${e.message}`);
+      }
+    }
+  } catch (error) {
+    console.error('Error restacking PR:', error);
+    res.status(error.status || 500).json({ error: error.message });
   }
 });
 

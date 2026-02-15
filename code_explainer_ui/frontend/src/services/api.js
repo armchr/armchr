@@ -332,3 +332,181 @@ export const updateConfig = async (config) => {
     throw error;
   }
 };
+
+// ==========================================
+// GitHub Integration API
+// ==========================================
+
+export const fetchGitHubStatus = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/github/status`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error fetching GitHub status:', error);
+    throw error;
+  }
+};
+
+export const fetchGitHubPulls = async (repo = null) => {
+  try {
+    const url = repo
+      ? `${API_BASE_URL}/github/pulls?repo=${encodeURIComponent(repo)}`
+      : `${API_BASE_URL}/github/pulls`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error fetching GitHub pulls:', error);
+    throw error;
+  }
+};
+
+export const fetchGitHubPrDetails = async (owner, repo, number) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/github/pulls/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${number}`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error fetching PR details:', error);
+    throw error;
+  }
+};
+
+export const fetchGitHubPrDiff = async (owner, repo, number) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/github/pulls/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${number}/diff`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error fetching PR diff:', error);
+    throw error;
+  }
+};
+
+export const splitGitHubPr = async (owner, repo, number) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/github/split`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ owner, repo, number })
+    });
+    if (!response.ok) {
+      const errorData = await response.json();
+      const error = new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      error.details = errorData;
+      throw error;
+    }
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error splitting GitHub PR:', error);
+    throw error;
+  }
+};
+
+export const reviewGitHubPr = async (owner, repo, number) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/github/review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ owner, repo, number })
+    });
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error reviewing GitHub PR:', error);
+    throw error;
+  }
+};
+
+export const analyzeGitHubPrUrl = async (url) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/github/analyze-url`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url })
+    });
+    if (!response.ok) {
+      const errorData = await response.json();
+      const error = new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      error.details = errorData;
+      throw error;
+    }
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error analyzing GitHub PR URL:', error);
+    throw error;
+  }
+};
+
+export const validateGitHubPat = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/github/status`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error validating GitHub PAT:', error);
+    throw error;
+  }
+};
+
+export const postPrComment = async (owner, repo, number, splitId, options = {}) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/github/pulls/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${number}/comment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ splitId, ...options })
+    });
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error posting PR comment:', error);
+    throw error;
+  }
+};
+
+export const restackPr = async (owner, repo, number, splitId, postComment = false) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/github/pulls/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${number}/restack`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ splitId, postComment })
+    });
+    if (!response.ok) {
+      const errorData = await response.json();
+      const error = new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      error.details = errorData;
+      throw error;
+    }
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error restacking PR:', error);
+    throw error;
+  }
+};

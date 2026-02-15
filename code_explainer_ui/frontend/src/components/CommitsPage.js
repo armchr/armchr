@@ -66,8 +66,9 @@ import {
   StarBorder as StarIcon
 } from '@mui/icons-material';
 import ReactMarkdown from 'react-markdown';
-import { fetchCommits, deleteCommit, fetchRepositories, fetchHealth, fetchReviews, fetchReviewById, archiveReview, fetchConfig } from '../services/api';
+import { fetchCommits, deleteCommit, fetchRepositories, fetchHealth, fetchReviews, fetchReviewById, archiveReview, fetchConfig, fetchGitHubStatus } from '../services/data-provider';
 import RepositoryPanel from './RepositoryPanel';
+import PullRequestsTab from './PullRequestsTab';
 import SettingsDialog from './SettingsDialog';
 import FilePath from './FilePath';
 import { PatchCardSkeleton, ReviewCardSkeleton } from './Skeletons';
@@ -316,8 +317,13 @@ const CommitsPage = () => {
   // Settings dialog state
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
 
+  // GitHub state
+  const [githubConnected, setGithubConnected] = useState(false);
+  const [githubRepos, setGithubRepos] = useState([]);
+  const [pullRequestCount, setPullRequestCount] = useState(0);
+
   // Tab state
-  const [activeTab, setActiveTab] = useState(0); // 0 = Split Patches, 1 = Reviews
+  const [activeTab, setActiveTab] = useState(0); // 0 = Split Patches, 1 = Pull Requests, 2 = Reviews
 
   // Reviews state
   const [reviews, setReviews] = useState([]);
@@ -396,7 +402,8 @@ const CommitsPage = () => {
       else if (archiveDialogOpen) setArchiveDialogOpen(false);
     },
     '1': () => setActiveTab(0), // Split Patches tab
-    '2': () => setActiveTab(1), // Reviews tab
+    '2': () => setActiveTab(1), // Pull Requests tab
+    '3': () => setActiveTab(2), // Reviews tab
   }), [settingsDialogOpen, contentDialogOpen, deleteDialogOpen, archiveDialogOpen]);
 
   useKeyboardShortcuts(shortcuts, !anyDialogOpen || shortcuts['escape']);
@@ -591,6 +598,26 @@ const CommitsPage = () => {
     return () => clearTimeout(timer);
   }, []);
 
+  // Check GitHub connection status
+  useEffect(() => {
+    const checkGitHub = async () => {
+      try {
+        const status = await fetchGitHubStatus();
+        setGithubConnected(status.connected);
+        setGithubRepos(status.repos || []);
+      } catch (err) {
+        // GitHub integration is optional, don't show error
+        console.error('Error checking GitHub status:', err);
+      }
+    };
+
+    const timer = setTimeout(() => {
+      checkGitHub();
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, []);
+
   // Load reviews on initial mount
   useEffect(() => {
     const loadReviews = async () => {
@@ -616,7 +643,7 @@ const CommitsPage = () => {
 
   // Poll for new reviews when Reviews tab is active
   useEffect(() => {
-    if (activeTab !== 1) {
+    if (activeTab !== 2) {
       // Not on Reviews tab, don't poll
       return;
     }
@@ -869,7 +896,7 @@ const CommitsPage = () => {
 
   const handleNewReview = async (reviewId) => {
     // Switch to Reviews tab
-    setActiveTab(1);
+    setActiveTab(2);
 
     try {
       // Reload reviews list
@@ -1253,6 +1280,33 @@ const CommitsPage = () => {
                 sx={{ textTransform: 'none', fontSize: '1rem', fontWeight: 500 }}
               />
               <Tab
+                icon={<GitHubIcon />}
+                iconPosition="start"
+                label={
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <span>Pull Requests</span>
+                    {pullRequestCount > 0 && (
+                      <Badge
+                        badgeContent={pullRequestCount}
+                        color="primary"
+                        max={999}
+                        sx={{
+                          '& .MuiBadge-badge': {
+                            fontSize: '0.75rem',
+                            height: '20px',
+                            minWidth: '20px',
+                            borderRadius: '10px'
+                          }
+                        }}
+                      >
+                        <Box sx={{ width: 0, height: 0 }} />
+                      </Badge>
+                    )}
+                  </Box>
+                }
+                sx={{ textTransform: 'none', fontSize: '1rem', fontWeight: 500 }}
+              />
+              <Tab
                 icon={<RateReviewIcon />}
                 iconPosition="start"
                 label={
@@ -1572,8 +1626,18 @@ const CommitsPage = () => {
         </Box>
       )}
 
-      {/* Reviews Tab Content */}
+      {/* Pull Requests Tab Content */}
       {activeTab === 1 && (
+        <PullRequestsTab
+          githubConnected={githubConnected}
+          githubRepos={githubRepos}
+          onSplitComplete={handleNewSplit}
+          onOpenSettings={() => setSettingsDialogOpen(true)}
+        />
+      )}
+
+      {/* Reviews Tab Content */}
+      {activeTab === 2 && (
         <Box>
           {/* Loading state with skeleton */}
           {reviewsLoading && (

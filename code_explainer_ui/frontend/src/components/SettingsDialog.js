@@ -30,6 +30,7 @@ import {
   Delete as DeleteIcon
 } from '@mui/icons-material';
 import { fetchConfig, updateConfig } from '../services/api';
+import GitHubSettings from './GitHubSettings';
 import { colors } from '../App';
 
 const SettingsDialog = ({ open, onClose }) => {
@@ -46,6 +47,9 @@ const SettingsDialog = ({ open, onClose }) => {
   const [repositories, setRepositories] = useState([]);
   const [expandedRepo, setExpandedRepo] = useState(null);
   const [llmSectionExpanded, setLlmSectionExpanded] = useState(true);
+  const [githubSectionExpanded, setGithubSectionExpanded] = useState(false);
+  const [githubPat, setGithubPat] = useState('');
+  const [githubRepos, setGithubRepos] = useState([]);
   const [rootDir, setRootDir] = useState(null);
   const errorRef = useRef(null);
 
@@ -66,6 +70,9 @@ const SettingsDialog = ({ open, onClose }) => {
         setConfig(data.config);
         setRepositories(data.repositories || []);
         setRootDir(data.rootDir || null);
+        setGithubPat(data.GITHUB_PAT_SET ? '********' : '');
+        setGithubRepos(data.GITHUB_REPOS || []);
+        setGithubSectionExpanded(!data.GITHUB_PAT_SET);
 
         // Check if all LLM settings are filled
         const allLlmSettingsFilled =
@@ -90,7 +97,13 @@ const SettingsDialog = ({ open, onClose }) => {
     setErrorDetails(null);
     setSuccess(false);
     try {
-      const data = await updateConfig({ config, repositories });
+      const savePayload = { config, repositories };
+      // Only send PAT if it was actually changed (not the masked placeholder)
+      if (githubPat && githubPat !== '********') {
+        savePayload.GITHUB_PAT = githubPat;
+      }
+      savePayload.GITHUB_REPOS = githubRepos;
+      const data = await updateConfig(savePayload);
       if (data.success) {
         // Close the dialog immediately
         onClose();
@@ -288,6 +301,25 @@ chmod +x armchair.sh
                     placeholder="gpt-4"
                   />
                 </Box>
+              </AccordionDetails>
+            </Accordion>
+
+            {/* GitHub Integration */}
+            <Accordion
+              expanded={githubSectionExpanded}
+              onChange={(e, isExpanded) => setGithubSectionExpanded(isExpanded)}
+              sx={{ mb: 2 }}
+            >
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography variant="h6">GitHub Integration</Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <GitHubSettings
+                  pat={githubPat}
+                  onPatChange={setGithubPat}
+                  repos={githubRepos}
+                  onReposChange={setGithubRepos}
+                />
               </AccordionDetails>
             </Accordion>
 

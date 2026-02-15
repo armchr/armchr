@@ -44,9 +44,15 @@ import {
   LightbulbOutlined as LightbulbIcon,
   ArrowForward as ArrowForwardIcon,
   Psychology as PsychologyIcon,
-  TipsAndUpdates as TipsIcon
+  TipsAndUpdates as TipsIcon,
+  GitHub as GitHubIcon,
+  Comment as CommentIcon,
+  SwapVert as SwapVertIcon,
+  Warning as WarningIcon,
+  OpenInNew as OpenInNewIcon
 } from '@mui/icons-material';
-import { fetchPatchContent, fetchCommits, fetchCommitDiff, splitCommit, fetchWorkingDirectoryDiff, applyPatch, reviewCommit } from '../services/api';
+import { fetchPatchContent, fetchCommits, fetchCommitDiff, splitCommit, fetchWorkingDirectoryDiff, applyPatch, reviewCommit, postPrComment, restackPr, fetchGitHubPrDetails } from '../services/data-provider';
+import ReactMarkdown from 'react-markdown';
 import DiffViewer from './DiffViewer';
 import FilePath, { CommitHash } from './FilePath';
 import Breadcrumbs from './Breadcrumbs';
@@ -78,6 +84,20 @@ const PatchDetailView = () => {
   const [showMentalModel, setShowMentalModel] = useState(true);
   const [mentalModelDialogOpen, setMentalModelDialogOpen] = useState(false);
   const [pendingMentalModelDialog, setPendingMentalModelDialog] = useState(false);
+
+  // PR actions state
+  const [postCommentDialogOpen, setPostCommentDialogOpen] = useState(false);
+  const [postingComment, setPostingComment] = useState(false);
+  const [commentSuccess, setCommentSuccess] = useState(null); // { url }
+  const [commentError, setCommentError] = useState(null);
+  const [includeDescriptions, setIncludeDescriptions] = useState(true);
+  const [includeReviewTips, setIncludeReviewTips] = useState(true);
+  const [restackDialogOpen, setRestackDialogOpen] = useState(false);
+  const [restacking, setRestacking] = useState(false);
+  const [restackResult, setRestackResult] = useState(null);
+  const [restackError, setRestackError] = useState(null);
+  const [restackPostComment, setRestackPostComment] = useState(true);
+  const [prDetails, setPrDetails] = useState(null);
 
   // Determine view type
   const isCommitView = !!repoName && !!commitHash && !branchName;
@@ -444,6 +464,70 @@ const PatchDetailView = () => {
       setReviewing(false);
     } finally {
       setReviewing(false);
+    }
+  };
+
+  // PR context: detect if this split came from a GitHub PR
+  const prContext = commit?.metadata?.pr || null;
+
+  const handleOpenPostComment = () => {
+    setPostCommentDialogOpen(true);
+    setCommentError(null);
+    setCommentSuccess(null);
+  };
+
+  const handlePostComment = async () => {
+    if (!prContext) return;
+    setPostingComment(true);
+    setCommentError(null);
+    try {
+      const result = await postPrComment(
+        prContext.owner,
+        prContext.repo,
+        prContext.number,
+        commit.commitId,
+        { includeDescriptions, includeReviewTips }
+      );
+      setCommentSuccess({ url: result.comment?.url, updated: result.comment?.updated });
+    } catch (err) {
+      setCommentError(err.message);
+    } finally {
+      setPostingComment(false);
+    }
+  };
+
+  const handleOpenRestack = async () => {
+    if (!prContext) return;
+    setRestackDialogOpen(true);
+    setRestackError(null);
+    setRestackResult(null);
+
+    // Fetch PR details for the dialog
+    try {
+      const details = await fetchGitHubPrDetails(prContext.owner, prContext.repo, prContext.number);
+      setPrDetails(details);
+    } catch (err) {
+      console.error('Error fetching PR details for restack:', err);
+    }
+  };
+
+  const handleRestack = async () => {
+    if (!prContext) return;
+    setRestacking(true);
+    setRestackError(null);
+    try {
+      const result = await restackPr(
+        prContext.owner,
+        prContext.repo,
+        prContext.number,
+        commit.commitId,
+        restackPostComment
+      );
+      setRestackResult(result);
+    } catch (err) {
+      setRestackError(err.message);
+    } finally {
+      setRestacking(false);
     }
   };
 
@@ -1226,6 +1310,39 @@ const PatchDetailView = () => {
 
           <Divider sx={{ mb: 2 }} />
 
+          {/* PR Action Buttons */}
+          {!isCommitView && !isWorkingDirectoryView && prContext && (
+            <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+              <Button
+                variant="outlined"
+                startIcon={<CommentIcon />}
+                onClick={handleOpenPostComment}
+                sx={{ textTransform: 'none' }}
+              >
+                Post to PR
+              </Button>
+              <Button
+                variant="outlined"
+                startIcon={<SwapVertIcon />}
+                onClick={handleOpenRestack}
+                color="warning"
+                sx={{ textTransform: 'none' }}
+              >
+                Restack PR
+              </Button>
+              <Button
+                variant="text"
+                startIcon={<OpenInNewIcon />}
+                href={prContext.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                sx={{ textTransform: 'none', color: colors.text.secondary }}
+              >
+                PR #{prContext.number}
+              </Button>
+            </Box>
+          )}
+
           {/* Apply Instructions */}
           {!isCommitView && !isWorkingDirectoryView && (
             <Accordion sx={{ mb: 2 }}>
@@ -1344,6 +1461,201 @@ const PatchDetailView = () => {
           )}
         </CardContent>
       </Card>
+      {/* Post to PR Comment Dialog */}
+      <Dialog
+        open={postCommentDialogOpen}
+        onClose={() => setPostCommentDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <CommentIcon sx={{ color: colors.primary.main }} />
+          Post Analysis to PR #{prContext?.number}
+        </DialogTitle>
+        <DialogContent>
+          {commentSuccess ? (
+            <Alert severity="success" sx={{ mb: 2 }}>
+              Comment {commentSuccess.updated ? 'updated' : 'posted'} successfully!
+              {commentSuccess.url && (
+                <Button
+                  size="small"
+                  href={commentSuccess.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  startIcon={<OpenInNewIcon />}
+                  sx={{ ml: 2, textTransform: 'none' }}
+                >
+                  View on GitHub
+                </Button>
+              )}
+            </Alert>
+          ) : (
+            <>
+              <DialogContentText sx={{ mb: 2 }}>
+                This will post the Armchair analysis as a comment on the PR.
+                If a previous Armchair comment exists, it will be updated.
+              </DialogContentText>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 2 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <input
+                    type="checkbox"
+                    checked={includeDescriptions}
+                    onChange={(e) => setIncludeDescriptions(e.target.checked)}
+                    id="include-descriptions"
+                  />
+                  <label htmlFor="include-descriptions" style={{ marginLeft: 8 }}>
+                    Include patch descriptions
+                  </label>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <input
+                    type="checkbox"
+                    checked={includeReviewTips}
+                    onChange={(e) => setIncludeReviewTips(e.target.checked)}
+                    id="include-review-tips"
+                  />
+                  <label htmlFor="include-review-tips" style={{ marginLeft: 8 }}>
+                    Include review tips
+                  </label>
+                </Box>
+              </Box>
+              {commentError && (
+                <Alert severity="error" sx={{ mb: 2 }}>
+                  {commentError}
+                </Alert>
+              )}
+            </>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setPostCommentDialogOpen(false)} variant="outlined">
+            {commentSuccess ? 'Close' : 'Cancel'}
+          </Button>
+          {!commentSuccess && (
+            <Button
+              onClick={handlePostComment}
+              variant="contained"
+              disabled={postingComment}
+              startIcon={postingComment ? <CircularProgress size={16} /> : <CommentIcon />}
+            >
+              {postingComment ? 'Posting...' : 'Post Comment'}
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
+
+      {/* Restack PR Dialog */}
+      <Dialog
+        open={restackDialogOpen}
+        onClose={() => { if (!restacking) setRestackDialogOpen(false); }}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, backgroundColor: 'rgba(237, 108, 2, 0.08)' }}>
+          <SwapVertIcon sx={{ color: '#ed6c02' }} />
+          Restack PR #{prContext?.number}
+        </DialogTitle>
+        <DialogContent sx={{ mt: 2 }}>
+          {restackResult ? (
+            <Box>
+              <Alert severity="success" sx={{ mb: 2 }}>
+                PR restacked successfully! Backup branch: <code>{restackResult.backupBranch}</code>
+              </Alert>
+              <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>New Commits:</Typography>
+              {restackResult.commits?.map((c, idx) => (
+                <Typography key={idx} variant="body2" sx={{ fontFamily: 'monospace', mb: 0.5 }}>
+                  {idx + 1}. {c.message} ({c.hash?.substring(0, 7)})
+                </Typography>
+              ))}
+              {prContext?.url && (
+                <Button
+                  href={prContext.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  startIcon={<OpenInNewIcon />}
+                  sx={{ mt: 2, textTransform: 'none' }}
+                >
+                  View PR on GitHub
+                </Button>
+              )}
+            </Box>
+          ) : (
+            <>
+              <Alert severity="warning" sx={{ mb: 2 }}>
+                <strong>This will force-push to the PR branch!</strong> The existing commits will be replaced
+                with clean, split patches. A backup branch will be created first.
+              </Alert>
+
+              {prDetails && (
+                <Box sx={{ mb: 2, p: 2, backgroundColor: colors.background.subtle, borderRadius: 1, border: `1px solid ${colors.border.light}` }}>
+                  <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>PR Details</Typography>
+                  <Typography variant="body2">Branch: {prDetails.head_branch} → {prDetails.base_branch}</Typography>
+                  <Typography variant="body2">Commits: {prDetails.commits}</Typography>
+                  <Typography variant="body2">Files changed: {prDetails.changed_files}</Typography>
+                </Box>
+              )}
+
+              <Box sx={{ mb: 2, p: 2, backgroundColor: colors.background.subtle, borderRadius: 1, border: `1px solid ${colors.border.light}` }}>
+                <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
+                  New Commits (from split patches):
+                </Typography>
+                {commit?.metadata?.patches?.filter(p => p.state !== 'deleted').map((p, idx) => (
+                  <Typography key={idx} variant="body2" sx={{ mb: 0.5 }}>
+                    {idx + 1}. {p.name}
+                  </Typography>
+                ))}
+              </Box>
+
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                <input
+                  type="checkbox"
+                  checked={restackPostComment}
+                  onChange={(e) => setRestackPostComment(e.target.checked)}
+                  id="restack-post-comment"
+                />
+                <label htmlFor="restack-post-comment" style={{ marginLeft: 8 }}>
+                  Post mental model as PR comment after restacking
+                </label>
+              </Box>
+
+              {restackError && (
+                <Alert severity="error" sx={{ mt: 2 }}>
+                  {restackError}
+                </Alert>
+              )}
+            </>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            onClick={() => setRestackDialogOpen(false)}
+            variant="outlined"
+            disabled={restacking}
+          >
+            {restackResult ? 'Close' : 'Cancel'}
+          </Button>
+          {!restackResult && (
+            <Button
+              onClick={handleRestack}
+              variant="contained"
+              color="warning"
+              disabled={restacking}
+              startIcon={restacking ? <CircularProgress size={16} /> : <SwapVertIcon />}
+            >
+              {restacking ? 'Restacking...' : 'Restack & Push'}
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
+
+      {/* Comment Success Snackbar */}
+      <Snackbar
+        open={!!commentSuccess}
+        autoHideDuration={5000}
+        onClose={() => setCommentSuccess(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        message={`Comment ${commentSuccess?.updated ? 'updated' : 'posted'} on PR`}
+      />
     </Container>
   );
 };
