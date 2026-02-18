@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -31,12 +32,14 @@ import {
   Description as DescriptionIcon,
   MergeType as MergeTypeIcon,
   PersonOutline as PersonIcon,
-  Clear as ClearIcon
+  Clear as ClearIcon,
+  Visibility as VisibilityIcon
 } from '@mui/icons-material';
 import { fetchGitHubPulls, splitGitHubPr, reviewGitHubPr, analyzeGitHubPrUrl } from '../services/api';
 import { colors } from '../App';
 
-const PullRequestsTab = ({ githubConnected, githubRepos, onSplitComplete, onOpenSettings }) => {
+const PullRequestsTab = ({ githubConnected, githubRepos, commits, onSplitComplete, onOpenSettings }) => {
+  const navigate = useNavigate();
   const [pullRequests, setPullRequests] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -49,6 +52,24 @@ const PullRequestsTab = ({ githubConnected, githubRepos, onSplitComplete, onOpen
   const [prUrl, setPrUrl] = useState('');
   const [urlAnalyzing, setUrlAnalyzing] = useState(false);
   const [urlError, setUrlError] = useState(null);
+
+  // Build a lookup: "owner/repo/number" -> array of matching splits (most recent first)
+  const prSplitsMap = useMemo(() => {
+    const map = {};
+    if (!commits) return map;
+    for (const commit of commits) {
+      const pr = commit.metadata?.pr;
+      if (!pr) continue;
+      const key = `${pr.owner}/${pr.repo}/${pr.number}`;
+      if (!map[key]) map[key] = [];
+      map[key].push(commit);
+    }
+    // Sort each list by generatedAt descending (most recent first)
+    for (const key of Object.keys(map)) {
+      map[key].sort((a, b) => (b.metadata?.generatedAt || 0) - (a.metadata?.generatedAt || 0));
+    }
+    return map;
+  }, [commits]);
 
   // Load PRs on mount and when filters change
   useEffect(() => {
@@ -149,10 +170,10 @@ const PullRequestsTab = ({ githubConnected, githubRepos, onSplitComplete, onOpen
     }
   };
 
-  const handleUrlKeyPress = (e) => {
-    if (e.key === 'Enter') {
-      handleAnalyzeUrl();
-    }
+  const handleViewSplit = (commit) => {
+    const firstPatch = commit.metadata?.patches?.[0];
+    const patchId = firstPatch ? firstPatch.id : 0;
+    navigate(`/patch/${commit.commitId}/${patchId}`);
   };
 
   // Not connected state
@@ -191,7 +212,7 @@ const PullRequestsTab = ({ githubConnected, githubRepos, onSplitComplete, onOpen
             placeholder="Paste a GitHub PR URL to analyze (e.g., https://github.com/owner/repo/pull/123)"
             value={prUrl}
             onChange={(e) => { setPrUrl(e.target.value); setUrlError(null); }}
-            onKeyPress={handleUrlKeyPress}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleAnalyzeUrl(); }}
             disabled={urlAnalyzing}
             error={!!urlError}
             helperText={urlError}
@@ -286,144 +307,190 @@ const PullRequestsTab = ({ githubConnected, githubRepos, onSplitComplete, onOpen
       {/* PR Cards */}
       {!loading && filteredPRs.length > 0 && (
         <Grid container spacing={2}>
-          {filteredPRs.map(pr => (
-            <Grid item xs={12} key={`${pr.owner}/${pr.repo}/${pr.number}`}>
-              <Card
-                sx={{
-                  border: `1px solid ${colors.border.light}`,
-                  transition: 'all 0.2s ease',
-                  '&:hover': {
-                    borderColor: colors.primary.main,
-                    boxShadow: '0 4px 12px rgba(99, 102, 241, 0.15)'
-                  }
-                }}
-              >
-                <CardContent sx={{ pb: '16px !important' }}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    {/* Left: PR info */}
-                    <Box sx={{ flexGrow: 1, mr: 2 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                        <MergeTypeIcon sx={{ mr: 1, color: pr.draft ? colors.text.muted : '#238636', fontSize: 22 }} />
-                        <Typography variant="h6" sx={{ fontWeight: 600, mr: 1 }}>
-                          {pr.title}
-                        </Typography>
-                        <Chip
-                          label={`#${pr.number}`}
-                          size="small"
-                          sx={{
-                            fontFamily: 'monospace',
-                            fontSize: '0.75rem',
-                            height: 22,
-                            backgroundColor: 'rgba(99, 102, 241, 0.1)',
-                            color: colors.primary.dark
-                          }}
-                        />
-                        {pr.draft && (
-                          <Chip label="Draft" size="small" sx={{ ml: 1, height: 22 }} color="default" />
-                        )}
-                      </Box>
+          {filteredPRs.map(pr => {
+            const prKey = `${pr.owner}/${pr.repo}/${pr.number}`;
+            const existingSplits = prSplitsMap[prKey] || [];
+            const latestSplit = existingSplits[0] || null;
 
-                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, ml: 4, mb: 1 }}>
-                        <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                          <CodeIcon sx={{ fontSize: 16 }} />
-                          {pr.owner}/{pr.repo}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                          <PersonIcon sx={{ fontSize: 16 }} />
-                          {pr.author}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                          <ScheduleIcon sx={{ fontSize: 16 }} />
-                          {formatRelativeTime(pr.updated_at)}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {pr.head_branch} → {pr.base_branch}
-                        </Typography>
-                      </Box>
-
-                      <Box sx={{ display: 'flex', gap: 1.5, ml: 4 }}>
-                        {pr.commits > 0 && (
-                          <Typography variant="caption" color="text.secondary">
-                            {pr.commits} commit{pr.commits !== 1 ? 's' : ''}
+            return (
+              <Grid item xs={12} key={prKey}>
+                <Card
+                  sx={{
+                    border: `1px solid ${colors.border.light}`,
+                    transition: 'all 0.2s ease',
+                    '&:hover': {
+                      borderColor: colors.primary.main,
+                      boxShadow: '0 4px 12px rgba(99, 102, 241, 0.15)'
+                    }
+                  }}
+                >
+                  <CardContent sx={{ pb: '16px !important' }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      {/* Left: PR info */}
+                      <Box sx={{ flexGrow: 1, mr: 2 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                          <MergeTypeIcon sx={{ mr: 1, color: pr.draft ? colors.text.muted : '#238636', fontSize: 22 }} />
+                          <Typography variant="h6" sx={{ fontWeight: 600, mr: 1 }}>
+                            {pr.title}
                           </Typography>
-                        )}
-                        <Typography variant="caption" color="text.secondary">
-                          <DescriptionIcon sx={{ fontSize: 14, mr: 0.3, verticalAlign: 'middle' }} />
-                          {pr.changed_files} file{pr.changed_files !== 1 ? 's' : ''}
-                        </Typography>
-                        <Typography variant="caption" sx={{ color: '#238636' }}>
-                          +{pr.additions}
-                        </Typography>
-                        <Typography variant="caption" sx={{ color: '#da3633' }}>
-                          -{pr.deletions}
-                        </Typography>
-                        {pr.labels && pr.labels.length > 0 && pr.labels.map(label => (
                           <Chip
-                            key={label.name}
-                            label={label.name}
+                            label={`#${pr.number}`}
                             size="small"
                             sx={{
-                              height: 18,
-                              fontSize: '0.65rem',
-                              backgroundColor: `#${label.color}20`,
-                              color: `#${label.color}`,
-                              border: `1px solid #${label.color}40`
+                              fontFamily: 'monospace',
+                              fontSize: '0.75rem',
+                              height: 22,
+                              backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                              color: colors.primary.dark
                             }}
                           />
-                        ))}
+                          {pr.draft && (
+                            <Chip label="Draft" size="small" sx={{ ml: 1, height: 22 }} color="default" />
+                          )}
+                        </Box>
+
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, ml: 4, mb: 1 }}>
+                          <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <CodeIcon sx={{ fontSize: 16 }} />
+                            {pr.owner}/{pr.repo}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <PersonIcon sx={{ fontSize: 16 }} />
+                            {pr.author}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <ScheduleIcon sx={{ fontSize: 16 }} />
+                            {formatRelativeTime(pr.updated_at)}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            {pr.head_branch} → {pr.base_branch}
+                          </Typography>
+                        </Box>
+
+                        <Box sx={{ display: 'flex', gap: 1.5, ml: 4, alignItems: 'center' }}>
+                          {pr.commits > 0 && (
+                            <Typography variant="caption" color="text.secondary">
+                              {pr.commits} commit{pr.commits !== 1 ? 's' : ''}
+                            </Typography>
+                          )}
+                          <Typography variant="caption" color="text.secondary">
+                            <DescriptionIcon sx={{ fontSize: 14, mr: 0.3, verticalAlign: 'middle' }} />
+                            {pr.changed_files} file{pr.changed_files !== 1 ? 's' : ''}
+                          </Typography>
+                          <Typography variant="caption" sx={{ color: '#238636' }}>
+                            +{pr.additions}
+                          </Typography>
+                          <Typography variant="caption" sx={{ color: '#da3633' }}>
+                            -{pr.deletions}
+                          </Typography>
+                          {pr.labels && pr.labels.length > 0 && pr.labels.map(label => (
+                            <Chip
+                              key={label.name}
+                              label={label.name}
+                              size="small"
+                              sx={{
+                                height: 18,
+                                fontSize: '0.65rem',
+                                backgroundColor: `#${label.color}20`,
+                                color: `#${label.color}`,
+                                border: `1px solid #${label.color}40`
+                              }}
+                            />
+                          ))}
+                        </Box>
+
+                        {/* Existing splits indicator */}
+                        {latestSplit && (
+                          <Box sx={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 1,
+                            ml: 4,
+                            mt: 1,
+                            p: 0.75,
+                            px: 1.5,
+                            backgroundColor: 'rgba(99, 102, 241, 0.06)',
+                            borderRadius: 1,
+                            border: `1px solid ${colors.border.light}`,
+                            width: 'fit-content'
+                          }}>
+                            <CallSplitIcon sx={{ fontSize: 16, color: colors.primary.main }} />
+                            <Typography variant="caption" sx={{ color: colors.primary.dark, fontWeight: 500 }}>
+                              {existingSplits.length === 1
+                                ? `Split into ${latestSplit.metadata?.patches?.filter(p => p.state !== 'deleted').length || 0} patches`
+                                : `${existingSplits.length} splits (latest: ${latestSplit.metadata?.patches?.filter(p => p.state !== 'deleted').length || 0} patches)`
+                              }
+                            </Typography>
+                            <Button
+                              size="small"
+                              startIcon={<VisibilityIcon sx={{ fontSize: 14 }} />}
+                              onClick={() => handleViewSplit(latestSplit)}
+                              sx={{
+                                textTransform: 'none',
+                                fontSize: '0.75rem',
+                                py: 0,
+                                px: 1,
+                                minHeight: 24,
+                                color: colors.primary.main,
+                              }}
+                            >
+                              View
+                            </Button>
+                          </Box>
+                        )}
+                      </Box>
+
+                      {/* Right: Action buttons */}
+                      <Box sx={{ display: 'flex', gap: 1, flexShrink: 0 }}>
+                        <Tooltip title={latestSplit ? 'Re-split this PR' : 'Split this PR into logical patches'}>
+                          <span>
+                            <Button
+                              variant="contained"
+                              size="small"
+                              startIcon={splittingPr === pr.number ? <CircularProgress size={16} /> : <CallSplitIcon />}
+                              onClick={() => handleSplit(pr)}
+                              disabled={splittingPr !== null || reviewingPr !== null}
+                              sx={{ textTransform: 'none' }}
+                            >
+                              {splittingPr === pr.number ? 'Splitting...' : latestSplit ? 'Re-split' : 'Split'}
+                            </Button>
+                          </span>
+                        </Tooltip>
+                        <Tooltip title="Review this PR">
+                          <span>
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              startIcon={reviewingPr === pr.number ? <CircularProgress size={16} /> : <RateReviewIcon />}
+                              onClick={() => handleReview(pr)}
+                              disabled={splittingPr !== null || reviewingPr !== null}
+                              sx={{ textTransform: 'none' }}
+                            >
+                              {reviewingPr === pr.number ? 'Reviewing...' : 'Review'}
+                            </Button>
+                          </span>
+                        </Tooltip>
+                        <Tooltip title="View on GitHub">
+                          <IconButton
+                            size="small"
+                            href={pr.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            sx={{ color: colors.text.secondary }}
+                          >
+                            <ArrowForwardIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
                       </Box>
                     </Box>
-
-                    {/* Right: Action buttons */}
-                    <Box sx={{ display: 'flex', gap: 1, flexShrink: 0 }}>
-                      <Tooltip title="Split this PR into logical patches">
-                        <span>
-                          <Button
-                            variant="contained"
-                            size="small"
-                            startIcon={splittingPr === pr.number ? <CircularProgress size={16} /> : <CallSplitIcon />}
-                            onClick={() => handleSplit(pr)}
-                            disabled={splittingPr !== null || reviewingPr !== null}
-                            sx={{ textTransform: 'none' }}
-                          >
-                            {splittingPr === pr.number ? 'Splitting...' : 'Split'}
-                          </Button>
-                        </span>
-                      </Tooltip>
-                      <Tooltip title="Review this PR">
-                        <span>
-                          <Button
-                            variant="outlined"
-                            size="small"
-                            startIcon={reviewingPr === pr.number ? <CircularProgress size={16} /> : <RateReviewIcon />}
-                            onClick={() => handleReview(pr)}
-                            disabled={splittingPr !== null || reviewingPr !== null}
-                            sx={{ textTransform: 'none' }}
-                          >
-                            {reviewingPr === pr.number ? 'Reviewing...' : 'Review'}
-                          </Button>
-                        </span>
-                      </Tooltip>
-                      <Tooltip title="View on GitHub">
-                        <IconButton
-                          size="small"
-                          href={pr.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          sx={{ color: colors.text.secondary }}
-                        >
-                          <ArrowForwardIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    </Box>
-                  </Box>
-                </CardContent>
-                {(splittingPr === pr.number || reviewingPr === pr.number) && (
-                  <LinearProgress />
-                )}
-              </Card>
-            </Grid>
-          ))}
+                  </CardContent>
+                  {(splittingPr === pr.number || reviewingPr === pr.number) && (
+                    <LinearProgress />
+                  )}
+                </Card>
+              </Grid>
+            );
+          })}
         </Grid>
       )}
     </Box>

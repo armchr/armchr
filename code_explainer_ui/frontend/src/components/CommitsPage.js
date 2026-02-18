@@ -1642,6 +1642,7 @@ const CommitsPage = () => {
         <PullRequestsTab
           githubConnected={githubConnected}
           githubRepos={githubRepos}
+          commits={commits}
           onSplitComplete={handleNewSplit}
           onOpenSettings={() => setSettingsDialogOpen(true)}
         />
