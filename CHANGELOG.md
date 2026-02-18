@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **GitHub Pull Request Support**: Split and review GitHub PRs directly from the dashboard
+  - New **Pull Requests** tab in the dashboard for browsing open PRs across connected repositories
+  - **Split PRs** into logical patches using the same splitter agent — fetches the PR diff via GitHub API
+  - **Review PRs** with the AI reviewer agent directly from the dashboard
+  - **Paste a PR URL** to analyze any public or accessible PR (e.g., `https://github.com/owner/repo/pull/123`)
+  - **GitHub PAT authentication** — configure a Personal Access Token in Settings to connect
+  - PAT validation endpoint to verify token before saving
+  - PR metadata (owner, repo, number) stored in split results for traceability
+  - View previous splits for a PR and navigate to patch details
+  - Filter PRs by repository and search by title, author, or number
+  - Post Armchair analysis as a comment on the PR (with mental model and patch table)
+  - Backend GitHub service module (`github-service.js`) for authenticated GitHub API access, PR diff fetching, remote detection, and comment management
+
 ### Changed
 - **Docker**: Updated Dockerfile for monorepo structure
   - Splitter source path updated from `splitter_dep/` to `code-splitter-agent/`

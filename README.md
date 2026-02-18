@@ -119,6 +119,17 @@ The annotated diff viewer shows:
 - **Side-by-side diff**: Before and after comparison
 - **Line-level context**: Annotations reference specific line ranges
 
+### GitHub Pull Request Integration
+Split and review GitHub PRs directly from the dashboard — no local clone required:
+- Browse open PRs across all connected repositories in the **Pull Requests** tab
+- **Split** a PR into logical patches using the same splitter agent
+- **Review** a PR with the AI reviewer
+- **Paste any PR URL** (e.g., `https://github.com/owner/repo/pull/123`) to analyze it instantly
+- Post Armchair analysis as a comment directly on the PR
+- Search and filter PRs by repository, title, author, or number
+
+Requires a GitHub Personal Access Token (PAT) — configure it in Settings.
+
 ### Reviewer Agent
 AI-powered code review:
 - Analyzes commits and uncommitted changes
@@ -305,6 +316,31 @@ curl -X POST http://localhost:8787/api/split \
 curl -X POST http://localhost:8787/api/split \
   -H "Content-Type: application/json" \
   -d '{"repoName": "my-repo", "branch": "main"}'
+```
+
+### GitHub PR Endpoints
+
+```bash
+# Check GitHub connection status
+curl http://localhost:8787/api/github/status
+
+# List open PRs across connected repos
+curl http://localhost:8787/api/github/pulls
+
+# Split a GitHub PR
+curl -X POST http://localhost:8787/api/github/split \
+  -H "Content-Type: application/json" \
+  -d '{"owner": "octocat", "repo": "hello-world", "number": 42}'
+
+# Review a GitHub PR
+curl -X POST http://localhost:8787/api/github/review \
+  -H "Content-Type: application/json" \
+  -d '{"owner": "octocat", "repo": "hello-world", "number": 42}'
+
+# Analyze a PR by URL
+curl -X POST http://localhost:8787/api/github/analyze-url \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://github.com/owner/repo/pull/123"}'
 ```
 
 ### Other Endpoints
