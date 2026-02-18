@@ -37,6 +37,7 @@ import {
 } from '@mui/icons-material';
 import { fetchGitHubPulls, splitGitHubPr, reviewGitHubPr, analyzeGitHubPrUrl } from '../services/api';
 import { colors } from '../App';
+import { FEATURE_REVIEW_ENABLED } from '../featureFlags';
 
 const PullRequestsTab = ({ githubConnected, githubRepos, commits, onSplitComplete, onOpenSettings }) => {
   const navigate = useNavigate();
@@ -456,20 +457,22 @@ const PullRequestsTab = ({ githubConnected, githubRepos, commits, onSplitComplet
                             </Button>
                           </span>
                         </Tooltip>
-                        <Tooltip title="Review this PR">
-                          <span>
-                            <Button
-                              variant="outlined"
-                              size="small"
-                              startIcon={reviewingPr === pr.number ? <CircularProgress size={16} /> : <RateReviewIcon />}
-                              onClick={() => handleReview(pr)}
-                              disabled={splittingPr !== null || reviewingPr !== null}
-                              sx={{ textTransform: 'none' }}
-                            >
-                              {reviewingPr === pr.number ? 'Reviewing...' : 'Review'}
-                            </Button>
-                          </span>
-                        </Tooltip>
+                        {FEATURE_REVIEW_ENABLED && (
+                          <Tooltip title="Review this PR">
+                            <span>
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                startIcon={reviewingPr === pr.number ? <CircularProgress size={16} /> : <RateReviewIcon />}
+                                onClick={() => handleReview(pr)}
+                                disabled={splittingPr !== null || reviewingPr !== null}
+                                sx={{ textTransform: 'none' }}
+                              >
+                                {reviewingPr === pr.number ? 'Reviewing...' : 'Review'}
+                              </Button>
+                            </span>
+                          </Tooltip>
+                        )}
                         <Tooltip title="View on GitHub">
                           <IconButton
                             size="small"

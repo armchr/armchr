@@ -52,6 +52,7 @@ import { Skeleton } from '@mui/material';
 import { fetchBranchCommits, splitCommit, fetchRepositoryDetails, refreshRepository, reviewCommit } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 import { colors } from '../App';
+import { FEATURE_REVIEW_ENABLED } from '../featureFlags';
 import FilePath, { CommitHash } from './FilePath';
 
 const RepositoryPanel = ({ repositories, loading, error, onReviewComplete, onSplitComplete, onOpenSettings }) => {
@@ -817,29 +818,31 @@ const RepositoryPanel = ({ repositories, loading, error, onReviewComplete, onSpl
                                                 </Typography>
                                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                                   {/* Review button for uncommitted */}
-                                                  {reviewingCommit[`${repo.name}:${branch.name}:uncommitted`] ? (
-                                                    <CircularProgress size={14} />
-                                                  ) : (
-                                                    <Tooltip title="Review uncommitted changes">
-                                                      <IconButton
-                                                        size="small"
-                                                        onClick={(e) => handleReviewCommit(repo.name, branch.name, null, e, details.status.untracked || [])}
-                                                        disabled={reviewingCommit[`${repo.name}:${branch.name}:uncommitted`] || splittingCommit[`${repo.name}:${branch.name}:uncommitted`]}
-                                                        sx={{
-                                                          p: 0.25,
-                                                          color: reviewSuccess[`${repo.name}:${branch.name}:uncommitted`] ? 'success.main' : 'secondary.main',
-                                                          '&:hover': {
-                                                            backgroundColor: 'rgba(156, 39, 176, 0.1)'
-                                                          }
-                                                        }}
-                                                      >
-                                                        {reviewSuccess[`${repo.name}:${branch.name}:uncommitted`] ? (
-                                                          <CheckCircleIcon sx={{ fontSize: 14 }} />
-                                                        ) : (
-                                                          <RateReviewIcon sx={{ fontSize: 14 }} />
-                                                        )}
-                                                      </IconButton>
-                                                    </Tooltip>
+                                                  {FEATURE_REVIEW_ENABLED && (
+                                                    reviewingCommit[`${repo.name}:${branch.name}:uncommitted`] ? (
+                                                      <CircularProgress size={14} />
+                                                    ) : (
+                                                      <Tooltip title="Review uncommitted changes">
+                                                        <IconButton
+                                                          size="small"
+                                                          onClick={(e) => handleReviewCommit(repo.name, branch.name, null, e, details.status.untracked || [])}
+                                                          disabled={reviewingCommit[`${repo.name}:${branch.name}:uncommitted`] || splittingCommit[`${repo.name}:${branch.name}:uncommitted`]}
+                                                          sx={{
+                                                            p: 0.25,
+                                                            color: reviewSuccess[`${repo.name}:${branch.name}:uncommitted`] ? 'success.main' : 'secondary.main',
+                                                            '&:hover': {
+                                                              backgroundColor: 'rgba(156, 39, 176, 0.1)'
+                                                            }
+                                                          }}
+                                                        >
+                                                          {reviewSuccess[`${repo.name}:${branch.name}:uncommitted`] ? (
+                                                            <CheckCircleIcon sx={{ fontSize: 14 }} />
+                                                          ) : (
+                                                            <RateReviewIcon sx={{ fontSize: 14 }} />
+                                                          )}
+                                                        </IconButton>
+                                                      </Tooltip>
+                                                    )
                                                   )}
                                                   {/* Split button for uncommitted */}
                                                   {splittingCommit[`${repo.name}:${branch.name}:uncommitted`] ? (
@@ -1048,7 +1051,7 @@ const RepositoryPanel = ({ repositories, loading, error, onReviewComplete, onSpl
                                                   </Box>
                                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
                                                     {/* Review button */}
-                                                    {(() => {
+                                                    {FEATURE_REVIEW_ENABLED && (() => {
                                                       const isReviewing = reviewingCommit[commitKey];
                                                       const showReviewSuccess = reviewSuccess[commitKey];
                                                       return isReviewing ? (

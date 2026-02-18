@@ -75,6 +75,7 @@ import FilePath from './FilePath';
 import { PatchCardSkeleton, ReviewCardSkeleton } from './Skeletons';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
 import { colors } from '../App';
+import { FEATURE_REVIEW_ENABLED } from '../featureFlags';
 
 // Mental Model Summary Component - shows in accordion summary
 const MentalModelSummary = ({ mentalModel }) => {
@@ -390,11 +391,13 @@ const CommitsPage = () => {
           setStats(data.stats);
         }
       });
-      fetchReviews().then(data => {
-        if (data.success) {
-          setReviews(data.reviews);
-        }
-      });
+      if (FEATURE_REVIEW_ENABLED) {
+        fetchReviews().then(data => {
+          if (data.success) {
+            setReviews(data.reviews);
+          }
+        });
+      }
     },
     'escape': () => {
       if (settingsDialogOpen) setSettingsDialogOpen(false);
@@ -404,7 +407,7 @@ const CommitsPage = () => {
     },
     '1': () => setActiveTab(0), // Split Patches tab
     '2': () => setActiveTab(1), // Pull Requests tab
-    '3': () => setActiveTab(2), // Reviews tab
+    ...(FEATURE_REVIEW_ENABLED ? { '3': () => setActiveTab(2) } : {}), // Reviews tab
   }), [settingsDialogOpen, contentDialogOpen, deleteDialogOpen, archiveDialogOpen]);
 
   useKeyboardShortcuts(shortcuts, !anyDialogOpen || shortcuts['escape']);
@@ -625,6 +628,8 @@ const CommitsPage = () => {
 
   // Load reviews on initial mount
   useEffect(() => {
+    if (!FEATURE_REVIEW_ENABLED) return;
+
     const loadReviews = async () => {
       try {
         setReviewsLoading(true);
@@ -648,6 +653,7 @@ const CommitsPage = () => {
 
   // Poll for new reviews when Reviews tab is active
   useEffect(() => {
+    if (!FEATURE_REVIEW_ENABLED) return;
     if (activeTab !== 2) {
       // Not on Reviews tab, don't poll
       return;
@@ -1317,31 +1323,33 @@ const CommitsPage = () => {
                 }
                 sx={{ textTransform: 'none', fontSize: '1rem', fontWeight: 500 }}
               />
-              <Tab
-                icon={<RateReviewIcon />}
-                iconPosition="start"
-                label={
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <span>Reviews</span>
-                    <Badge
-                      badgeContent={reviews.length}
-                      color="primary"
-                      max={999}
-                      sx={{
-                        '& .MuiBadge-badge': {
-                          fontSize: '0.75rem',
-                          height: '20px',
-                          minWidth: '20px',
-                          borderRadius: '10px'
-                        }
-                      }}
-                    >
-                      <Box sx={{ width: 0, height: 0 }} />
-                    </Badge>
-                  </Box>
-                }
-                sx={{ textTransform: 'none', fontSize: '1rem', fontWeight: 500 }}
-              />
+              {FEATURE_REVIEW_ENABLED && (
+                <Tab
+                  icon={<RateReviewIcon />}
+                  iconPosition="start"
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <span>Reviews</span>
+                      <Badge
+                        badgeContent={reviews.length}
+                        color="primary"
+                        max={999}
+                        sx={{
+                          '& .MuiBadge-badge': {
+                            fontSize: '0.75rem',
+                            height: '20px',
+                            minWidth: '20px',
+                            borderRadius: '10px'
+                          }
+                        }}
+                      >
+                        <Box sx={{ width: 0, height: 0 }} />
+                      </Badge>
+                    </Box>
+                  }
+                  sx={{ textTransform: 'none', fontSize: '1rem', fontWeight: 500 }}
+                />
+              )}
             </Tabs>
           </Box>
 
@@ -1649,7 +1657,7 @@ const CommitsPage = () => {
       )}
 
       {/* Reviews Tab Content */}
-      {activeTab === 2 && (
+      {FEATURE_REVIEW_ENABLED && activeTab === 2 && (
         <Box>
           {/* Loading state with skeleton */}
           {reviewsLoading && (

@@ -57,6 +57,7 @@ import DiffViewer from './DiffViewer';
 import FilePath, { CommitHash } from './FilePath';
 import Breadcrumbs from './Breadcrumbs';
 import { colors } from '../App';
+import { FEATURE_REVIEW_ENABLED } from '../featureFlags';
 
 const PatchDetailView = () => {
   const { commitId, patchId, repoName, commitHash, branchName } = useParams();
@@ -586,46 +587,52 @@ const PatchDetailView = () => {
       </Snackbar>
 
       {/* Snackbar for reviewing notification */}
-      <Snackbar
-        open={reviewing}
-        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-        sx={{ top: '80px !important' }}
-      >
-        <Alert severity="info" sx={{ width: '100%', fontSize: '1rem', fontWeight: 600 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <CircularProgress size={24} />
-            <Typography variant="body1" sx={{ fontWeight: 600 }}>
-              Reviewing in progress... This may take a few moments.
-            </Typography>
-          </Box>
-        </Alert>
-      </Snackbar>
+      {FEATURE_REVIEW_ENABLED && (
+        <Snackbar
+          open={reviewing}
+          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+          sx={{ top: '80px !important' }}
+        >
+          <Alert severity="info" sx={{ width: '100%', fontSize: '1rem', fontWeight: 600 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <CircularProgress size={24} />
+              <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                Reviewing in progress... This may take a few moments.
+              </Typography>
+            </Box>
+          </Alert>
+        </Snackbar>
+      )}
 
       {/* Snackbar for review success */}
-      <Snackbar
-        open={reviewSuccess}
-        autoHideDuration={3000}
-        onClose={() => setReviewSuccess(false)}
-        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-        sx={{ top: '80px !important' }}
-      >
-        <Alert severity="success" sx={{ width: '100%', fontSize: '1rem', fontWeight: 600 }}>
-          Review completed successfully!
-        </Alert>
-      </Snackbar>
+      {FEATURE_REVIEW_ENABLED && (
+        <Snackbar
+          open={reviewSuccess}
+          autoHideDuration={3000}
+          onClose={() => setReviewSuccess(false)}
+          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+          sx={{ top: '80px !important' }}
+        >
+          <Alert severity="success" sx={{ width: '100%', fontSize: '1rem', fontWeight: 600 }}>
+            Review completed successfully!
+          </Alert>
+        </Snackbar>
+      )}
 
       {/* Snackbar for review error */}
-      <Snackbar
-        open={!!reviewError}
-        autoHideDuration={5000}
-        onClose={() => setReviewError(null)}
-        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-        sx={{ top: '80px !important' }}
-      >
-        <Alert severity="error" sx={{ width: '100%', fontSize: '1rem', fontWeight: 600 }}>
-          Review failed: {reviewError}
-        </Alert>
-      </Snackbar>
+      {FEATURE_REVIEW_ENABLED && (
+        <Snackbar
+          open={!!reviewError}
+          autoHideDuration={5000}
+          onClose={() => setReviewError(null)}
+          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+          sx={{ top: '80px !important' }}
+        >
+          <Alert severity="error" sx={{ width: '100%', fontSize: '1rem', fontWeight: 600 }}>
+            Review failed: {reviewError}
+          </Alert>
+        </Snackbar>
+      )}
 
       {/* Split Error Dialog */}
       <Dialog
@@ -919,21 +926,23 @@ const PatchDetailView = () => {
             >
               {splitting ? 'Splitting...' : splitSuccess ? 'Split Complete!' : isWorkingDirectoryView ? 'Split Changes' : 'Split Commit'}
             </Button>
-            <Button
-              variant="outlined"
-              startIcon={reviewing ? <CircularProgress size={20} color="inherit" /> : reviewSuccess ? <CheckCircleIcon /> : <RateReviewIcon />}
-              onClick={handleReview}
-              disabled={reviewing || splitting}
-              color={reviewSuccess ? 'success' : 'secondary'}
-              sx={{
-                minWidth: 160,
-                fontSize: reviewing ? '1rem' : '0.875rem',
-                fontWeight: reviewing ? 700 : 500,
-                py: 1
-              }}
-            >
-              {reviewing ? 'Reviewing...' : reviewSuccess ? 'Review Complete!' : isWorkingDirectoryView ? 'Review Changes' : 'Review Commit'}
-            </Button>
+            {FEATURE_REVIEW_ENABLED && (
+              <Button
+                variant="outlined"
+                startIcon={reviewing ? <CircularProgress size={20} color="inherit" /> : reviewSuccess ? <CheckCircleIcon /> : <RateReviewIcon />}
+                onClick={handleReview}
+                disabled={reviewing || splitting}
+                color={reviewSuccess ? 'success' : 'secondary'}
+                sx={{
+                  minWidth: 160,
+                  fontSize: reviewing ? '1rem' : '0.875rem',
+                  fontWeight: reviewing ? 700 : 500,
+                  py: 1
+                }}
+              >
+                {reviewing ? 'Reviewing...' : reviewSuccess ? 'Review Complete!' : isWorkingDirectoryView ? 'Review Changes' : 'Review Commit'}
+              </Button>
+            )}
           </Box>
         )}
       </Box>
@@ -1230,7 +1239,7 @@ const PatchDetailView = () => {
       )}
 
       {/* Review Results */}
-      {reviewData && (
+      {FEATURE_REVIEW_ENABLED && reviewData && (
         <Card elevation={2} sx={{ mb: 3, backgroundColor: '#f0f7ff' }}>
           <CardContent>
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
