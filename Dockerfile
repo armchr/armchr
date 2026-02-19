@@ -1,6 +1,6 @@
 # Multi-stage Dockerfile combining splitter, UI frontend, and backend
 # Stage 1: Build frontend
-FROM node:18-alpine as frontend-build
+FROM node:20-alpine as frontend-build
 
 WORKDIR /app/frontend
 COPY code_explainer_ui/frontend/package*.json ./
@@ -9,7 +9,7 @@ COPY code_explainer_ui/frontend/ ./
 RUN npm run build
 
 # Stage 2: Prepare backend
-FROM node:18-alpine as backend-build
+FROM node:20-alpine as backend-build
 
 WORKDIR /app/backend
 COPY code_explainer_ui/backend/package*.json ./
@@ -22,7 +22,7 @@ FROM python:3.11-slim
 # Install Node.js and git
 RUN apt-get update && \
     apt-get install -y curl git && \
-    curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     apt-get install -y nodejs && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
